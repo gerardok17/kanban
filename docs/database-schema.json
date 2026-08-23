@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://project-management-mvp.local/schemas/board.json",
+  "title": "Project Management MVP database export",
+  "type": "object",
+  "required": ["schemaVersion", "users", "boards", "columns", "cards"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "const": 1
+    },
+    "users": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/user" }
+    },
+    "boards": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/board" }
+    },
+    "columns": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/column" }
+    },
+    "cards": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/card" }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "user": {
+      "type": "object",
+      "required": ["id", "username", "createdAt"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "username": { "type": "string", "minLength": 1 },
+        "createdAt": { "$ref": "#/$defs/timestamp" }
+      }
+    },
+    "board": {
+      "type": "object",
+      "required": ["id", "userId", "title", "createdAt", "updatedAt"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "userId": { "$ref": "#/$defs/id" },
+        "title": { "type": "string", "minLength": 1 },
+        "createdAt": { "$ref": "#/$defs/timestamp" },
+        "updatedAt": { "$ref": "#/$defs/timestamp" }
+      }
+    },
+    "column": {
+      "type": "object",
+      "required": ["id", "boardId", "title", "position", "cardIds"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "boardId": { "$ref": "#/$defs/id" },
+        "title": { "type": "string", "minLength": 1 },
+        "position": { "type": "integer", "minimum": 0 },
+        "cardIds": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/id" },
+          "uniqueItems": true
+        }
+      }
+    },
+    "card": {
+      "type": "object",
+      "required": ["id", "boardId", "title", "details", "createdAt", "updatedAt"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "boardId": { "$ref": "#/$defs/id" },
+        "title": { "type": "string", "minLength": 1 },
+        "details": { "type": "string" },
+        "createdAt": { "$ref": "#/$defs/timestamp" },
+        "updatedAt": { "$ref": "#/$defs/timestamp" }
+      }
+    }
+  }
+}

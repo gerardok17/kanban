@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -13,11 +13,45 @@ import {
 } from "@dnd-kit/core";
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
+import { AIChatSidebar } from "@/components/AIChatSidebar";
+import { addCard, deleteCard, getBoard, moveCard as moveRemoteCard, renameColumn } from "@/lib/api";
 import { createId, initialData, moveCard, type BoardData } from "@/lib/kanban";
 
-export const KanbanBoard = () => {
+export const KanbanBoard = ({ onLogout, remote = false }: { onLogout?: () => void; remote?: boolean }) => {
   const [board, setBoard] = useState<BoardData>(() => initialData);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(remote);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!remote) {
+      return;
+    }
+    void getBoard()
+      .then((nextBoard) => setBoard(nextBoard))
+      .catch((requestError: { status?: number }) => {
+        if (requestError.status === 401) {
+          onLogout?.();
+          return;
+        }
+        setError("Unable to load the board. Please try again.");
+      })
+      .finally(() => setIsLoading(false));
+  }, [onLogout, remote]);
+
+  const applyRemoteChange = async (change: () => Promise<BoardData>) => {
+    try {
+      const nextBoard = await change();
+      setBoard(nextBoard);
+      setError("");
+    } catch (requestError) {
+      if ((requestError as { status?: number }).status === 401) {
+        onLogout?.();
+        return;
+      }
+      setError("Unable to save that change. Your board was not updated.");
+    }
+  };
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -39,13 +73,35 @@ export const KanbanBoard = () => {
       return;
     }
 
-    setBoard((prev) => ({
-      ...prev,
-      columns: moveCard(prev.columns, active.id as string, over.id as string),
-    }));
+    if (remote) {
+      const sortableColumnId = over.data.current?.sortable?.containerId as
+        | string
+        | undefined;
+      const targetColumn = board.columns.find(
+        (column) =>
+          column.id === sortableColumnId ||
+          column.id === over.id ||
+          column.cardIds.includes(over.id as string)
+      );
+      if (targetColumn) {
+        const position = over.id === targetColumn.id || !sortableColumnId
+          ? targetColumn.cardIds.length
+          : Math.max(0, targetColumn.cardIds.indexOf(over.id as string));
+        void applyRemoteChange(() =>
+          moveRemoteCard(active.id as string, targetColumn.id, position)
+        );
+      }
+      return;
+    }
+
+    setBoard((prev) => ({ ...prev, columns: moveCard(prev.columns, active.id as string, over.id as string) }));
   };
 
   const handleRenameColumn = (columnId: string, title: string) => {
+    if (remote) {
+      void applyRemoteChange(() => renameColumn(columnId, title));
+      return;
+    }
     setBoard((prev) => ({
       ...prev,
       columns: prev.columns.map((column) =>
@@ -55,6 +111,10 @@ export const KanbanBoard = () => {
   };
 
   const handleAddCard = (columnId: string, title: string, details: string) => {
+    if (remote) {
+      void applyRemoteChange(() => addCard(columnId, title, details));
+      return;
+    }
     const id = createId("card");
     setBoard((prev) => ({
       ...prev,
@@ -71,6 +131,10 @@ export const KanbanBoard = () => {
   };
 
   const handleDeleteCard = (columnId: string, cardId: string) => {
+    if (remote) {
+      void applyRemoteChange(() => deleteCard(cardId));
+      return;
+    }
     setBoard((prev) => {
       return {
         ...prev,
@@ -90,6 +154,10 @@ export const KanbanBoard = () => {
   };
 
   const activeCard = activeCardId ? cardsById[activeCardId] : null;
+
+  if (isLoading) {
+    return <main className="flex min-h-screen items-center justify-center text-sm text-[var(--gray-text)]">Loading board...</main>;
+  }
 
   return (
     <div className="relative overflow-hidden">
@@ -111,15 +179,27 @@ export const KanbanBoard = () => {
                 and capture quick notes without getting buried in settings.
               </p>
             </div>
-            <div className="rounded-2xl border border-[var(--stroke)] bg-[var(--surface)] px-5 py-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[var(--gray-text)]">
-                Focus
-              </p>
-              <p className="mt-2 text-lg font-semibold text-[var(--primary-blue)]">
-                One board. Five columns. Zero clutter.
-              </p>
+            <div className="flex items-start gap-4">
+              <div className="rounded-2xl border border-[var(--stroke)] bg-[var(--surface)] px-5 py-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[var(--gray-text)]">
+                  Focus
+                </p>
+                <p className="mt-2 text-lg font-semibold text-[var(--primary-blue)]">
+                  One board. Five columns. Zero clutter.
+                </p>
+              </div>
+              {onLogout ? (
+                <button
+                  type="button"
+                  onClick={onLogout}
+                  className="rounded-full border border-[var(--stroke)] px-4 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--gray-text)] transition hover:text-[var(--navy-dark)]"
+                >
+                  Log out
+                </button>
+              ) : null}
             </div>
           </div>
+          {error ? <p role="alert" className="text-sm font-semibold text-[var(--secondary-purple)]">{error}</p> : null}
           <div className="flex flex-wrap items-center gap-4">
             {board.columns.map((column) => (
               <div
@@ -139,18 +219,26 @@ export const KanbanBoard = () => {
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >
-          <section className="grid gap-6 lg:grid-cols-5">
-            {board.columns.map((column) => (
-              <KanbanColumn
-                key={column.id}
-                column={column}
-                cards={column.cardIds.map((cardId) => board.cards[cardId])}
-                onRename={handleRenameColumn}
-                onAddCard={handleAddCard}
-                onDeleteCard={handleDeleteCard}
+          <div className={remote ? "grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]" : "block"}>
+            <section className="grid gap-6 lg:grid-cols-5">
+              {board.columns.map((column) => (
+                <KanbanColumn
+                  key={column.id}
+                  column={column}
+                  cards={column.cardIds.map((cardId) => board.cards[cardId])}
+                  onRename={handleRenameColumn}
+                  onAddCard={handleAddCard}
+                  onDeleteCard={handleDeleteCard}
+                />
+              ))}
+            </section>
+            {remote ? (
+              <AIChatSidebar
+                onBoardUpdate={setBoard}
+                onUnauthorized={() => onLogout?.()}
               />
-            ))}
-          </section>
+            ) : null}
+          </div>
           <DragOverlay>
             {activeCard ? (
               <div className="w-[260px]">

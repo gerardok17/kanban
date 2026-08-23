@@ -24,7 +24,6 @@ export const KanbanColumn = ({
 
   return (
     <section
-      ref={setNodeRef}
       className={clsx(
         "flex min-h-[520px] flex-col rounded-3xl border border-[var(--stroke)] bg-[var(--surface-strong)] p-4 shadow-[var(--shadow)] transition",
         isOver && "ring-2 ring-[var(--accent-yellow)]"
@@ -47,7 +46,10 @@ export const KanbanColumn = ({
           />
         </div>
       </div>
-      <div className="mt-4 flex flex-1 flex-col gap-3">
+      <div
+        ref={setNodeRef}
+        className="mt-4 flex min-h-[360px] flex-1 flex-col gap-3"
+      >
         <SortableContext items={column.cardIds} strategy={verticalListSortingStrategy}>
           {cards.map((card) => (
             <KanbanCard
