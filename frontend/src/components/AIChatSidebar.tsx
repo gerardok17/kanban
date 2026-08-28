@@ -9,6 +9,9 @@ type ChatMessage = {
   content: string;
 };
 
+// The backend rejects history longer than 50 entries; keep well under that.
+const MAX_HISTORY = 40;
+
 type AIChatSidebarProps = {
   onBoardUpdate: (board: BoardData) => void;
   onUnauthorized: () => void;
@@ -31,7 +34,7 @@ export const AIChatSidebar = ({
       return;
     }
 
-    const history = messages;
+    const history = messages.slice(-MAX_HISTORY);
     setQuestion("");
     setError("");
     setMessages((current) => [

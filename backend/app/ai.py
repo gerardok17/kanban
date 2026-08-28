@@ -87,9 +87,11 @@ def stream_structured_response(
         ) as response:
             response.raise_for_status()
             for line in response.iter_lines():
-                if not line or line == "data: [DONE]":
+                if not line.startswith("data: "):
                     continue
                 data = line.removeprefix("data: ")
+                if data == "[DONE]":
+                    break
                 payload: Any = json.loads(data)
                 delta = payload["choices"][0]["delta"].get("content", "")
                 if delta:

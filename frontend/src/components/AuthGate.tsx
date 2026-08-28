@@ -41,27 +41,34 @@ export const AuthGate = () => {
     }
 
     setIsSubmitting(true);
-    if (usesBackendSession()) {
-      const response = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ username, password }),
-      });
-      if (!response.ok) {
-        setError("Unable to sign in right now.");
-        setIsSubmitting(false);
-        return;
+    try {
+      if (usesBackendSession()) {
+        const response = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ username, password }),
+        });
+        if (!response.ok) {
+          setError("Unable to sign in right now.");
+          return;
+        }
       }
+      window.localStorage.setItem("kanban-auth", "signed-in");
+      window.dispatchEvent(new Event(authEvent));
+    } catch {
+      setError("Unable to sign in right now.");
+    } finally {
+      setIsSubmitting(false);
     }
-
-    window.localStorage.setItem("kanban-auth", "signed-in");
-    window.dispatchEvent(new Event(authEvent));
-    setIsSubmitting(false);
   };
 
   const handleLogout = async () => {
     if (usesBackendSession()) {
-      await fetch("/api/auth/logout", { method: "POST" });
+      try {
+        await fetch("/api/auth/logout", { method: "POST" });
+      } catch {
+        // Sign out locally regardless; the backend session cookie expires on its own.
+      }
     }
     window.localStorage.removeItem("kanban-auth");
     window.dispatchEvent(new Event(authEvent));
