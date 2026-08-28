@@ -32,7 +32,7 @@ export const KanbanColumn = ({
   return (
     <section
       className={clsx(
-        "flex min-h-[520px] flex-col rounded-3xl border border-[var(--stroke)] bg-[var(--surface-strong)] p-4 shadow-[var(--shadow)] transition",
+        "flex min-h-[520px] flex-col rounded-3xl border border-white/60 bg-white/55 p-4 shadow-[var(--shadow)] backdrop-blur-sm transition",
         isOver && "ring-2 ring-[var(--accent-yellow)]"
       )}
       data-testid={`column-${column.id}`}

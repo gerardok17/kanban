@@ -84,42 +84,42 @@ export const AuthGate = () => {
     <main className="flex min-h-screen items-center justify-center px-6 py-12">
       <form
         onSubmit={handleSubmit}
-        className="w-full max-w-md rounded-[32px] border border-[var(--stroke)] bg-white/90 p-8 shadow-[var(--shadow)]"
+        className="w-full max-w-md rounded-[32px] border border-[var(--card-border-light)] bg-[var(--card-dark)] p-8 shadow-[var(--shadow)] backdrop-blur"
       >
-        <p className="text-xs font-semibold uppercase tracking-[0.35em] text-[var(--gray-text)]">
+        <p className="text-xs font-semibold uppercase tracking-[0.35em] text-white/55">
           Project workspace
         </p>
-        <h1 className="mt-3 font-display text-4xl font-semibold text-[var(--navy-dark)]">
+        <h1 className="mt-3 font-display text-4xl font-semibold text-[var(--accent-yellow)]">
           Sign in
         </h1>
-        <p className="mt-3 text-sm leading-6 text-[var(--gray-text)]">
+        <p className="mt-3 text-sm leading-6 text-white/70">
           Sign in to open your Kanban board.
         </p>
         <div className="mt-8 space-y-4">
-          <label className="block text-sm font-semibold text-[var(--navy-dark)]">
+          <label className="block text-sm font-semibold text-white/80">
             Username
             <input
               value={username}
               onChange={(event) => setUsername(event.target.value)}
-              className="mt-2 w-full rounded-xl border border-[var(--stroke)] bg-white px-3 py-3 text-sm font-medium text-[var(--navy-dark)] outline-none focus:border-[var(--primary-blue)]"
+              className="mt-2 w-full rounded-xl border border-white/20 bg-white/10 px-3 py-3 text-sm font-medium text-white outline-none placeholder:text-white/40 focus:border-[var(--accent-yellow)]"
               autoComplete="username"
               required
             />
           </label>
-          <label className="block text-sm font-semibold text-[var(--navy-dark)]">
+          <label className="block text-sm font-semibold text-white/80">
             Password
             <input
               type="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              className="mt-2 w-full rounded-xl border border-[var(--stroke)] bg-white px-3 py-3 text-sm font-medium text-[var(--navy-dark)] outline-none focus:border-[var(--primary-blue)]"
+              className="mt-2 w-full rounded-xl border border-white/20 bg-white/10 px-3 py-3 text-sm font-medium text-white outline-none placeholder:text-white/40 focus:border-[var(--accent-yellow)]"
               autoComplete="current-password"
               required
             />
           </label>
         </div>
         {error ? (
-          <p role="alert" className="mt-4 text-sm font-semibold text-[var(--secondary-purple)]">
+          <p role="alert" className="mt-4 text-sm font-semibold text-[var(--accent-yellow)]">
             {error}
           </p>
         ) : null}
