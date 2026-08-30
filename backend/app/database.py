@@ -1,14 +1,30 @@
 import os
-import sqlite3
-from datetime import UTC, datetime
-from pathlib import Path
-from typing import Any
+from contextlib import contextmanager
+from datetime import datetime, timezone
+from typing import Any, Iterator
+
+import bcrypt
+import pymysql
+from pymysql.connections import Connection
+from pymysql.cursors import DictCursor
 
 
-DEFAULT_DATA_DIR = Path(os.getenv("DATA_DIR", "/app/data"))
-DATABASE_PATH = DEFAULT_DATA_DIR / "kanban.sqlite3"
+DB_CONFIG: dict[str, Any] = {
+    "host": os.getenv("MYSQL_HOST", "127.0.0.1"),
+    "port": int(os.getenv("MYSQL_PORT", "3306")),
+    "user": os.getenv("MYSQL_USER", "root"),
+    "password": os.getenv("MYSQL_PASSWORD", ""),
+    "database": os.getenv("MYSQL_DATABASE", "kanbanpmdb"),
+    "charset": "utf8mb4",
+    "cursorclass": DictCursor,
+    "autocommit": False,
+}
 
-SEED_COLUMNS = [
+SEED_USERNAME = "gerardok17"
+SEED_PASSWORD = "gerardok17"
+
+# Default columns every new board starts with (renameable in the UI).
+DEFAULT_COLUMNS = [
     ("col-backlog", "Backlog", 0),
     ("col-discovery", "To Do", 1),
     ("col-progress", "In Progress", 2),
@@ -16,144 +32,214 @@ SEED_COLUMNS = [
     ("col-done", "Done", 4),
 ]
 
-SEED_CARDS = [
-    ("card-1", "Align roadmap themes", "Draft quarterly themes with impact statements and metrics."),
-    ("card-2", "Gather customer signals", "Review support tags, sales notes, and churn feedback."),
-    ("card-3", "Prototype analytics view", "Sketch initial dashboard layout and key drill-downs."),
-    ("card-4", "Refine status language", "Standardize column labels and tone across the board."),
-    ("card-5", "Design card layout", "Add hierarchy and spacing for scanning dense lists."),
-    ("card-6", "QA micro-interactions", "Verify hover, focus, and loading states."),
-    ("card-7", "Ship marketing page", "Final copy approved and asset pack delivered."),
-    ("card-8", "Close onboarding sprint", "Document release notes and share internally."),
+SCHEMA_STATEMENTS = [
+    """
+    CREATE TABLE IF NOT EXISTS schema_migrations (
+        version INT PRIMARY KEY,
+        applied_at DATETIME NOT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS users (
+        id VARCHAR(64) PRIMARY KEY,
+        username VARCHAR(120) NOT NULL UNIQUE,
+        password_hash VARCHAR(255) NOT NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS boards (
+        id VARCHAR(64) PRIMARY KEY,
+        user_id VARCHAR(64) NOT NULL,
+        title VARCHAR(200) NOT NULL,
+        position INT NOT NULL DEFAULT 0,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        INDEX idx_boards_user (user_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS `columns` (
+        id VARCHAR(64) PRIMARY KEY,
+        board_id VARCHAR(64) NOT NULL,
+        title VARCHAR(200) NOT NULL,
+        position INT NOT NULL,
+        FOREIGN KEY (board_id) REFERENCES boards(id) ON DELETE CASCADE,
+        UNIQUE KEY uq_columns_board_pos (board_id, position)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS cards (
+        id VARCHAR(64) PRIMARY KEY,
+        board_id VARCHAR(64) NOT NULL,
+        title VARCHAR(300) NOT NULL,
+        details TEXT,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (board_id) REFERENCES boards(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS card_positions (
+        board_id VARCHAR(64) NOT NULL,
+        column_id VARCHAR(64) NOT NULL,
+        card_id VARCHAR(64) NOT NULL UNIQUE,
+        position INT NOT NULL,
+        PRIMARY KEY (board_id, card_id),
+        FOREIGN KEY (board_id) REFERENCES boards(id) ON DELETE CASCADE,
+        FOREIGN KEY (column_id) REFERENCES `columns`(id) ON DELETE CASCADE,
+        FOREIGN KEY (card_id) REFERENCES cards(id) ON DELETE CASCADE,
+        UNIQUE KEY uq_cardpos_col_pos (column_id, position),
+        UNIQUE KEY uq_cardpos_col_card (column_id, card_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    """,
 ]
 
-SEED_CARD_COLUMNS = {
-    "card-1": "col-backlog",
-    "card-2": "col-backlog",
-    "card-3": "col-discovery",
-    "card-4": "col-progress",
-    "card-5": "col-progress",
-    "card-6": "col-review",
-    "card-7": "col-done",
-    "card-8": "col-done",
-}
+
+def utc_now() -> datetime:
+    """Naive UTC datetime, stored directly in DATETIME columns."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
-def utc_now() -> str:
-    return datetime.now(UTC).isoformat()
+def hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
 
-def connect() -> sqlite3.Connection:
-    DATABASE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    connection = sqlite3.connect(DATABASE_PATH)
-    connection.row_factory = sqlite3.Row
-    connection.execute("PRAGMA foreign_keys = ON")
-    return connection
+def verify_password(password: str, password_hash: str) -> bool:
+    try:
+        return bcrypt.checkpw(password.encode(), password_hash.encode())
+    except ValueError:
+        return False
+
+
+@contextmanager
+def connect() -> Iterator[Connection]:
+    connection = pymysql.connect(**DB_CONFIG)
+    try:
+        yield connection
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
+    finally:
+        connection.close()
+
+
+def _one(connection: Connection, sql: str, params: tuple = ()) -> dict[str, Any] | None:
+    with connection.cursor() as cursor:
+        cursor.execute(sql, params)
+        return cursor.fetchone()
+
+
+def _all(connection: Connection, sql: str, params: tuple = ()) -> list[dict[str, Any]]:
+    with connection.cursor() as cursor:
+        cursor.execute(sql, params)
+        return list(cursor.fetchall())
+
+
+def _exec(connection: Connection, sql: str, params: tuple = ()) -> int:
+    with connection.cursor() as cursor:
+        cursor.execute(sql, params)
+        return cursor.rowcount
 
 
 def initialize_database() -> None:
     with connect() as connection:
-        connection.executescript(
-            """
-            CREATE TABLE IF NOT EXISTS schema_migrations (
-                version INTEGER PRIMARY KEY,
-                applied_at TEXT NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS users (
-                id TEXT PRIMARY KEY,
-                username TEXT NOT NULL UNIQUE,
-                created_at TEXT NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS boards (
-                id TEXT PRIMARY KEY,
-                user_id TEXT NOT NULL UNIQUE REFERENCES users(id),
-                title TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS columns (
-                id TEXT PRIMARY KEY,
-                board_id TEXT NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
-                title TEXT NOT NULL,
-                position INTEGER NOT NULL,
-                UNIQUE(board_id, position)
-            );
-            CREATE TABLE IF NOT EXISTS cards (
-                id TEXT PRIMARY KEY,
-                board_id TEXT NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
-                title TEXT NOT NULL,
-                details TEXT,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS card_positions (
-                board_id TEXT NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
-                column_id TEXT NOT NULL REFERENCES columns(id) ON DELETE CASCADE,
-                card_id TEXT NOT NULL UNIQUE REFERENCES cards(id) ON DELETE CASCADE,
-                position INTEGER NOT NULL,
-                PRIMARY KEY(board_id, card_id),
-                UNIQUE(column_id, position),
-                UNIQUE(column_id, card_id)
-            );
-            INSERT OR IGNORE INTO schema_migrations(version, applied_at)
-            VALUES (1, '2026-08-23T00:00:00+00:00');
-            """
+        for statement in SCHEMA_STATEMENTS:
+            _exec(connection, statement)
+        _exec(
+            connection,
+            "INSERT IGNORE INTO schema_migrations(version, applied_at) VALUES (1, %s)",
+            (utc_now(),),
         )
-        user = connection.execute(
-            "SELECT id FROM users WHERE username = ?", ("user",)
-        ).fetchone()
-        if user is None:
-            now = utc_now()
-            connection.execute(
-                "INSERT INTO users(id, username, created_at) VALUES (?, ?, ?)",
-                ("user-1", "user", now),
-            )
-            connection.execute(
-                "INSERT INTO boards(id, user_id, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
-                ("board-1", "user-1", "Kanban Studio", now, now),
-            )
-            connection.executemany(
-                "INSERT INTO columns(id, board_id, title, position) VALUES (?, 'board-1', ?, ?)",
-                SEED_COLUMNS,
-            )
-            connection.executemany(
-                "INSERT INTO cards(id, board_id, title, details, created_at, updated_at) VALUES (?, 'board-1', ?, ?, ?, ?)",
-                [(card_id, title, details, now, now) for card_id, title, details in SEED_CARDS],
-            )
-            column_positions: dict[str, int] = {}
-            for card_id, column_id in SEED_CARD_COLUMNS.items():
-                position = column_positions.get(column_id, 0)
-                connection.execute(
-                    "INSERT INTO card_positions(board_id, column_id, card_id, position) VALUES ('board-1', ?, ?, ?)",
-                    (column_id, card_id, position),
-                )
-                column_positions[column_id] = position + 1
+        existing = _one(
+            connection, "SELECT id FROM users WHERE username = %s", (SEED_USERNAME,)
+        )
+        if existing is None:
+            _seed_initial(connection)
+
+
+def _seed_initial(connection: Connection) -> None:
+    now = utc_now()
+    _exec(
+        connection,
+        "INSERT INTO users(id, username, password_hash, created_at) VALUES (%s, %s, %s, %s)",
+        ("user-gerardok17", SEED_USERNAME, hash_password(SEED_PASSWORD), now),
+    )
+    _exec(
+        connection,
+        "INSERT INTO boards(id, user_id, title, position, created_at, updated_at) VALUES (%s, %s, %s, %s, %s, %s)",
+        ("board-1", "user-gerardok17", "My Board", 0, now, now),
+    )
+    with connection.cursor() as cursor:
+        cursor.executemany(
+            "INSERT INTO `columns`(id, board_id, title, position) VALUES (%s, 'board-1', %s, %s)",
+            DEFAULT_COLUMNS,
+        )
+
+
+def authenticate(username: str, password: str) -> str | None:
+    with connect() as connection:
+        user = _one(
+            connection,
+            "SELECT username, password_hash FROM users WHERE username = %s",
+            (username,),
+        )
+    if user is None or not verify_password(password, user["password_hash"]):
+        return None
+    return user["username"]
+
+
+def board_id_for_user(connection: Connection, username: str) -> str:
+    # Phase 1: a user still resolves to a single board (the first one). Phase 2
+    # replaces these callers with explicit board_id + ownership checks.
+    board = _one(
+        connection,
+        """
+        SELECT boards.id FROM boards
+        JOIN users ON users.id = boards.user_id
+        WHERE users.username = %s
+        ORDER BY boards.position, boards.created_at
+        LIMIT 1
+        """,
+        (username,),
+    )
+    if board is None:
+        raise ValueError("Board not found")
+    return board["id"]
 
 
 def get_board_for_user(username: str) -> dict[str, Any]:
     with connect() as connection:
-        board = connection.execute(
+        board = _one(
+            connection,
             """
-            SELECT boards.* FROM boards
+            SELECT boards.id, boards.title FROM boards
             JOIN users ON users.id = boards.user_id
-            WHERE users.username = ?
+            WHERE users.username = %s
+            ORDER BY boards.position, boards.created_at
+            LIMIT 1
             """,
             (username,),
-        ).fetchone()
+        )
         if board is None:
             raise ValueError("Board not found")
-        columns = connection.execute(
-            "SELECT id, title FROM columns WHERE board_id = ? ORDER BY position",
+        columns = _all(
+            connection,
+            "SELECT id, title FROM `columns` WHERE board_id = %s ORDER BY position",
             (board["id"],),
-        ).fetchall()
-        cards = connection.execute(
-            "SELECT id, title, details FROM cards WHERE board_id = ?",
+        )
+        cards = _all(
+            connection,
+            "SELECT id, title, details FROM cards WHERE board_id = %s",
             (board["id"],),
-        ).fetchall()
-        positions = connection.execute(
-            "SELECT column_id, card_id, position FROM card_positions WHERE board_id = ? ORDER BY position",
+        )
+        positions = _all(
+            connection,
+            "SELECT column_id, card_id, position FROM card_positions WHERE board_id = %s ORDER BY position",
             (board["id"],),
-        ).fetchall()
+        )
 
     card_ids_by_column: dict[str, list[str]] = {column["id"]: [] for column in columns}
     for position in positions:
@@ -181,31 +267,20 @@ def get_board_for_user(username: str) -> dict[str, Any]:
     }
 
 
-def board_id_for_user(connection: sqlite3.Connection, username: str) -> str:
-    board = connection.execute(
-        """
-        SELECT boards.id FROM boards
-        JOIN users ON users.id = boards.user_id
-        WHERE users.username = ?
-        """,
-        (username,),
-    ).fetchone()
-    if board is None:
-        raise ValueError("Board not found")
-    return board["id"]
-
-
 def rename_column(username: str, column_id: str, title: str) -> None:
     with connect() as connection:
         board_id = board_id_for_user(connection, username)
-        result = connection.execute(
-            "UPDATE columns SET title = ? WHERE id = ? AND board_id = ?",
+        changed = _exec(
+            connection,
+            "UPDATE `columns` SET title = %s WHERE id = %s AND board_id = %s",
             (title, column_id, board_id),
         )
-        if result.rowcount == 0:
+        if changed == 0:
             raise ValueError("Column not found")
-        connection.execute(
-            "UPDATE boards SET updated_at = ? WHERE id = ?", (utc_now(), board_id)
+        _exec(
+            connection,
+            "UPDATE boards SET updated_at = %s WHERE id = %s",
+            (utc_now(), board_id),
         )
 
 
@@ -214,58 +289,72 @@ def create_card(
 ) -> None:
     with connect() as connection:
         board_id = board_id_for_user(connection, username)
-        column = connection.execute(
-            "SELECT id FROM columns WHERE id = ? AND board_id = ?", (column_id, board_id)
-        ).fetchone()
+        column = _one(
+            connection,
+            "SELECT id FROM `columns` WHERE id = %s AND board_id = %s",
+            (column_id, board_id),
+        )
         if column is None:
             raise ValueError("Column not found")
-        existing_card = connection.execute(
-            "SELECT id FROM cards WHERE id = ?", (card_id,)
-        ).fetchone()
+        existing_card = _one(
+            connection, "SELECT id FROM cards WHERE id = %s", (card_id,)
+        )
         if existing_card is not None:
             raise ValueError("Card ID already exists")
         now = utc_now()
-        connection.execute(
-            "INSERT INTO cards(id, board_id, title, details, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+        _exec(
+            connection,
+            "INSERT INTO cards(id, board_id, title, details, created_at, updated_at) VALUES (%s, %s, %s, %s, %s, %s)",
             (card_id, board_id, title, details, now, now),
         )
-        next_position = connection.execute(
-            "SELECT COALESCE(MAX(position) + 1, 0) AS position FROM card_positions WHERE column_id = ?",
+        next_position = _one(
+            connection,
+            "SELECT COALESCE(MAX(position) + 1, 0) AS position FROM card_positions WHERE column_id = %s",
             (column_id,),
-        ).fetchone()["position"]
-        connection.execute(
-            "INSERT INTO card_positions(board_id, column_id, card_id, position) VALUES (?, ?, ?, ?)",
+        )["position"]
+        _exec(
+            connection,
+            "INSERT INTO card_positions(board_id, column_id, card_id, position) VALUES (%s, %s, %s, %s)",
             (board_id, column_id, card_id, next_position),
         )
-        connection.execute(
-            "UPDATE boards SET updated_at = ? WHERE id = ?", (now, board_id)
+        _exec(
+            connection,
+            "UPDATE boards SET updated_at = %s WHERE id = %s",
+            (now, board_id),
         )
 
 
 def update_card(username: str, card_id: str, title: str, details: str | None) -> None:
     with connect() as connection:
         board_id = board_id_for_user(connection, username)
-        result = connection.execute(
-            "UPDATE cards SET title = ?, details = ?, updated_at = ? WHERE id = ? AND board_id = ?",
+        changed = _exec(
+            connection,
+            "UPDATE cards SET title = %s, details = %s, updated_at = %s WHERE id = %s AND board_id = %s",
             (title, details, utc_now(), card_id, board_id),
         )
-        if result.rowcount == 0:
+        if changed == 0:
             raise ValueError("Card not found")
-        connection.execute(
-            "UPDATE boards SET updated_at = ? WHERE id = ?", (utc_now(), board_id)
+        _exec(
+            connection,
+            "UPDATE boards SET updated_at = %s WHERE id = %s",
+            (utc_now(), board_id),
         )
 
 
 def delete_card(username: str, card_id: str) -> None:
     with connect() as connection:
         board_id = board_id_for_user(connection, username)
-        result = connection.execute(
-            "DELETE FROM cards WHERE id = ? AND board_id = ?", (card_id, board_id)
+        changed = _exec(
+            connection,
+            "DELETE FROM cards WHERE id = %s AND board_id = %s",
+            (card_id, board_id),
         )
-        if result.rowcount == 0:
+        if changed == 0:
             raise ValueError("Card not found")
-        connection.execute(
-            "UPDATE boards SET updated_at = ? WHERE id = ?", (utc_now(), board_id)
+        _exec(
+            connection,
+            "UPDATE boards SET updated_at = %s WHERE id = %s",
+            (utc_now(), board_id),
         )
         normalize_positions(connection, board_id)
 
@@ -273,52 +362,68 @@ def delete_card(username: str, card_id: str) -> None:
 def move_card(username: str, card_id: str, column_id: str, position: int) -> None:
     with connect() as connection:
         board_id = board_id_for_user(connection, username)
-        card = connection.execute(
-            "SELECT card_id FROM card_positions WHERE card_id = ? AND board_id = ?",
+        card = _one(
+            connection,
+            "SELECT card_id FROM card_positions WHERE card_id = %s AND board_id = %s",
             (card_id, board_id),
-        ).fetchone()
-        column = connection.execute(
-            "SELECT id FROM columns WHERE id = ? AND board_id = ?", (column_id, board_id)
-        ).fetchone()
+        )
+        column = _one(
+            connection,
+            "SELECT id FROM `columns` WHERE id = %s AND board_id = %s",
+            (column_id, board_id),
+        )
         if card is None or column is None or position < 0:
             raise ValueError("Invalid card move")
-        connection.execute(
-            "DELETE FROM card_positions WHERE card_id = ? AND board_id = ?", (card_id, board_id)
+        _exec(
+            connection,
+            "DELETE FROM card_positions WHERE card_id = %s AND board_id = %s",
+            (card_id, board_id),
         )
         normalize_positions(connection, board_id)
-        count = connection.execute(
-            "SELECT COUNT(*) AS count FROM card_positions WHERE column_id = ?", (column_id,)
-        ).fetchone()["count"]
+        count = _one(
+            connection,
+            "SELECT COUNT(*) AS count FROM card_positions WHERE column_id = %s",
+            (column_id,),
+        )["count"]
         insert_position = min(position, count)
-        connection.execute(
-            "UPDATE card_positions SET position = position + 1000000 WHERE column_id = ? AND position >= ?",
+        # Large-offset shuffle to sidestep the UNIQUE(column_id, position)
+        # constraint mid-update, then normalize back to contiguous positions.
+        _exec(
+            connection,
+            "UPDATE card_positions SET position = position + 1000000 WHERE column_id = %s AND position >= %s",
             (column_id, insert_position),
         )
-        connection.execute(
-            "UPDATE card_positions SET position = position - 999999 WHERE column_id = ? AND position >= ?",
+        _exec(
+            connection,
+            "UPDATE card_positions SET position = position - 999999 WHERE column_id = %s AND position >= %s",
             (column_id, insert_position + 1000000),
         )
-        connection.execute(
-            "INSERT INTO card_positions(board_id, column_id, card_id, position) VALUES (?, ?, ?, ?)",
+        _exec(
+            connection,
+            "INSERT INTO card_positions(board_id, column_id, card_id, position) VALUES (%s, %s, %s, %s)",
             (board_id, column_id, card_id, insert_position),
         )
         normalize_positions(connection, board_id)
-        connection.execute(
-            "UPDATE boards SET updated_at = ? WHERE id = ?", (utc_now(), board_id)
+        _exec(
+            connection,
+            "UPDATE boards SET updated_at = %s WHERE id = %s",
+            (utc_now(), board_id),
         )
 
 
-def normalize_positions(connection: sqlite3.Connection, board_id: str) -> None:
-    columns = connection.execute(
-        "SELECT id FROM columns WHERE board_id = ?", (board_id,)
-    ).fetchall()
+def normalize_positions(connection: Connection, board_id: str) -> None:
+    columns = _all(
+        connection, "SELECT id FROM `columns` WHERE board_id = %s", (board_id,)
+    )
     for column in columns:
-        positions = connection.execute(
-            "SELECT card_id FROM card_positions WHERE column_id = ? ORDER BY position",
+        ordered = _all(
+            connection,
+            "SELECT card_id FROM card_positions WHERE column_id = %s ORDER BY position",
             (column["id"],),
-        ).fetchall()
-        for position, card in enumerate(positions):
-            connection.execute(
-                "UPDATE card_positions SET position = ? WHERE board_id = ? AND card_id = ?",
+        )
+        for position, card in enumerate(ordered):
+            _exec(
+                connection,
+                "UPDATE card_positions SET position = %s WHERE board_id = %s AND card_id = %s",
                 (position, board_id, card["card_id"]),
             )

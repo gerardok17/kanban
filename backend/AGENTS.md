@@ -7,7 +7,8 @@ pytest and FastAPI's `TestClient`.
 
 The Dockerized application listens on port `8000`.
 
-The backend has SQLite persistence, authentication, and board routes. Keep pure
+The backend has MariaDB persistence (`kanbanpmdb` in the shared `homelab-db`, via PyMySQL),
+DB-backed authentication, and board routes. Keep pure
 validation and board transformations isolated from HTTP handlers where
 practical, and favor integration tests for behavior crossing the API, database,
 and frontend boundaries.

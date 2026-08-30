@@ -2,11 +2,11 @@
 
 ## Storage
 
-Use SQLite as the runtime database. The backend will create the database file
-when it does not exist. The default location will be a configurable
-`DATA_DIR/kanban.sqlite3`, with `DATA_DIR` defaulting to `/app/data` in Docker.
-The data directory should be mounted as a volume so container replacement does
-not remove user data.
+Use MariaDB as the runtime database — the `kanbanpmdb` database inside the shared
+`homelab-db` container. The backend connects with PyMySQL using the `MYSQL_*`
+environment variables (see `.env.example`) and creates the tables on startup if
+they do not exist. Data persists in the `homelab-db` volume, so replacing the app
+container never removes user data.
 
 The JSON contract is in [database-schema.json](database-schema.json). It is a
 normalized export shape: users, boards, columns, and cards are separate
@@ -14,10 +14,10 @@ collections, with `column.cardIds` preserving card order.
 
 ## Relational model
 
-- `users`: `id` primary key, unique `username`, and `created_at`.
+- `users`: `id` primary key, unique `username`, bcrypt `password_hash`, and `created_at`.
 - `boards`: `id` primary key, `user_id` foreign key to `users`, `title`,
-  `created_at`, and `updated_at`. Add a unique constraint on `user_id` for the
-  MVP's one-board-per-user rule.
+  `position`, `created_at`, and `updated_at`. There is no unique constraint on
+  `user_id` — a user can own multiple boards.
 - `columns`: `id` primary key, `board_id` foreign key to `boards`, `title`, and
   `position`. A unique `(board_id, position)` constraint preserves column order.
 - `cards`: `id` primary key, `board_id` foreign key to `boards`, `title`,
@@ -27,17 +27,16 @@ collections, with `column.cardIds` preserving card order.
   constraints. This is the relational equivalent of `column.cardIds` and makes
   moving a card an explicit ordered update.
 
-The MVP seed user has a stable internal ID such as `user-1` and username
-`user`. The password remains the hardcoded MVP credential and should not be
-stored as a plaintext database field. Future users can be added without
-changing board ownership or the API shape.
+The seed user has a stable internal ID (`user-gerardok17`) and username
+`gerardok17`, with a bcrypt-hashed password stored in `password_hash`. Future
+users can be added without changing board ownership or the API shape.
 
 ## Initialization and versioning
 
-On application startup, open the configured SQLite file, enable foreign keys,
-create the tables if absent, and apply numbered migrations in one transaction.
-Seed the MVP user and initial board only when those records do not exist. Do not
-reseed or overwrite user changes on later startups.
+On application startup (from the FastAPI lifespan), connect to MariaDB, create the
+tables if absent (InnoDB, `utf8mb4`, `DATETIME` timestamps), and record the schema
+version. Seed the user and one empty starter board only when those records do not
+exist. Do not reseed or overwrite user changes on later startups.
 
 Schema version `1` is the contract currently proposed. Future migrations should
 be additive where possible, recorded in a migrations table, and applied in
@@ -56,17 +55,15 @@ order before serving requests.
 - Card titles are required and trimmed; details may be empty or null.
 - Unknown IDs, duplicate IDs, cross-board references, malformed ordering, and
   attempts to mutate another user's board are rejected without partial writes.
-- AI-generated updates use the same validation and transaction path as normal
-  API mutations.
 
 ## Validation examples
 
-The current frontend `initialData` maps directly to one user, one board, five
-columns, and eight cards. The second column is displayed as `To Do` and keeps
-the stable ID `col-discovery` for existing data. Empty columns are valid and
-are represented with an empty `cardIds` array. Renaming a column changes only
-its title; moving a card changes only its position membership and ordering.
-Unknown or duplicate card references are invalid.
+A fresh database seeds one user and one empty board with five columns and no
+cards. The second column is displayed as `To Do` and keeps the stable ID
+`col-discovery`. Empty columns are valid and are represented with an empty
+`cardIds` array. Renaming a column changes only its title; moving a card changes
+only its position membership and ordering. Unknown or duplicate card references
+are invalid.
 
 ## Part 6 API contract
 

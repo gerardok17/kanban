@@ -3,7 +3,7 @@
 import { FormEvent, useState, useSyncExternalStore } from 'react'
 import { KanbanBoard } from '@/components/KanbanBoard'
 
-const credentials = { username: 'user', password: 'password' }
+const credentials = { username: 'gerardok17', password: 'gerardok17' }
 const authEvent = 'kanban-auth-change'
 
 const subscribeToAuth = (onChange: () => void) => {

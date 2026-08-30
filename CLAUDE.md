@@ -28,13 +28,14 @@ Packaged with `uv` (the Docker image installs with `uv pip install`). Locally, u
 or a venv with `pip install -e ".[test]"` then `pytest`. `pyproject.toml` sets `pythonpath` and `testpaths`,
 so `pytest` alone discovers `tests/`. Single test: `pytest tests/test_main.py::test_health_route_returns_ok`.
 
-Set `DATA_DIR` to a writable path when running the backend outside Docker (it defaults to `/app/data`).
-The test suite overrides `database.DATABASE_PATH` to a tmp dir per test.
+The backend connects to MariaDB using the `MYSQL_*` variables from `.env` (see `.env.example`).
+The backend test suite is skipped unless `KANBAN_TEST_DATABASE` points at a disposable MariaDB test database.
 
 ### Docker (run from repo root)
 
 - `sh scripts/start-mac.sh` / `start-linux.sh` / `start-windows.ps1` - build the image and run it detached on port `8000`
 - matching `stop-*` scripts remove the container
+- The app needs a `.env` (copy `.env.example`) and reaches the shared `homelab-db` MariaDB container over the `homelab-net` docker network; the Linux/mac start scripts create/join that network and pass `--env-file .env`
 
 ## Architecture
 
@@ -52,8 +53,9 @@ Keep this split intact. Presentational components must not make network calls di
 
 ### Backend request flow
 
-`app/main.py` defines all routes. Auth is a hardcoded `user`/`password` check that mints an in-memory
-session token (`sessions: set[str]`, not persisted, cleared on restart) stored in an httponly cookie.
+`app/main.py` defines all routes. Auth checks the username/password against the `users` table
+(bcrypt, via `database.authenticate`) and mints an in-memory session token (`sessions: dict[str, str]`
+mapping token to username, not persisted, cleared on restart) stored in an httponly cookie.
 Every board route calls `require_session`, then resolves the board through the authenticated username -
 client-supplied ownership IDs are never trusted. Mutation routes return the full board in the same shape
 as `GET /api/board`.
@@ -64,8 +66,11 @@ app is only fully correct when run from the Docker image.
 
 ### Database (`app/database.py`)
 
-SQLite at `DATA_DIR/kanban.sqlite3`, created and seeded once on startup (`initialize_database`); later
-startups never reseed. Schema and rules are documented in `docs/DATABASE.md`.
+MariaDB — the `kanbanpmdb` database in the shared `homelab-db` container, reached via PyMySQL using the
+`MYSQL_*` env vars. Tables are created and seeded on startup (`initialize_database`, run from the FastAPI
+lifespan); later startups never reseed. The schema is multi-board from the start (a user can own many
+boards), and the seed creates the `gerardok17` user (bcrypt-hashed) plus one empty starter board. Schema
+and rules are documented in `docs/DATABASE.md`.
 
 `card_positions` is the source of truth for card ordering (the relational form of `column.cardIds`).
 `normalize_positions` rewrites every column's positions to contiguous zero-based integers, and is called
