@@ -13,7 +13,6 @@ import {
 } from '@dnd-kit/core'
 import { KanbanColumn } from '@/components/KanbanColumn'
 import { KanbanCardPreview } from '@/components/KanbanCardPreview'
-import { AIChatSidebar } from '@/components/AIChatSidebar'
 import {
   addCard,
   deleteCard,
@@ -214,30 +213,18 @@ export const KanbanBoard = ({
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >
-          <div
-            className={
-              remote ? 'grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]' : 'block'
-            }
-          >
-            <section className='grid gap-6 lg:grid-cols-5'>
-              {board.columns.map((column) => (
-                <KanbanColumn
-                  key={column.id}
-                  column={column}
-                  cards={column.cardIds.map((cardId) => board.cards[cardId])}
-                  onRename={handleRenameColumn}
-                  onAddCard={handleAddCard}
-                  onDeleteCard={handleDeleteCard}
-                />
-              ))}
-            </section>
-            {remote ? (
-              <AIChatSidebar
-                onBoardUpdate={setBoard}
-                onUnauthorized={() => onLogout?.()}
+          <section className='grid gap-6 lg:grid-cols-5'>
+            {board.columns.map((column) => (
+              <KanbanColumn
+                key={column.id}
+                column={column}
+                cards={column.cardIds.map((cardId) => board.cards[cardId])}
+                onRename={handleRenameColumn}
+                onAddCard={handleAddCard}
+                onDeleteCard={handleDeleteCard}
               />
-            ) : null}
-          </div>
+            ))}
+          </section>
           <DragOverlay>
             {activeCard ? (
               <div className='w-[260px]'>

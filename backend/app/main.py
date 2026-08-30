@@ -1,14 +1,10 @@
 from pathlib import Path
 from secrets import token_urlsafe
-import json
 
 from fastapi import Cookie, FastAPI, HTTPException, Response, status
-from pydantic import BaseModel, Field
-from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 from fastapi.staticfiles import StaticFiles
 from . import database
-from .ai import OpenRouterError, ask_openrouter, stream_structured_response
-from .structured_ai import StructuredAiResponse
 
 app = FastAPI(title="Project Management MVP")
 sessions: set[str] = set()
@@ -38,15 +34,6 @@ class CardUpdateRequest(BaseModel):
 class CardMoveRequest(BaseModel):
     columnId: str
     position: int
-
-
-class AiTestRequest(BaseModel):
-    question: str = "2+2"
-
-
-class AiChatRequest(BaseModel):
-    question: str = Field(min_length=1, max_length=4000)
-    history: list[dict[str, str]] = Field(default_factory=list, max_length=50)
 
 
 def require_session(session: str | None) -> str:
@@ -86,47 +73,6 @@ def read_hello() -> dict[str, str]:
 @app.get("/health")
 def read_health() -> dict[str, str]:
     return {"status": "ok"}
-
-
-@app.post("/api/ai/test")
-def test_ai_connection(
-    payload: AiTestRequest,
-    session: str | None = Cookie(default=None),
-) -> dict[str, str]:
-    require_session(session)
-    question = payload.question.strip()
-    if not question:
-        raise HTTPException(status_code=422, detail="Question is required")
-    try:
-        return {"answer": ask_openrouter(question)}
-    except OpenRouterError as error:
-        raise HTTPException(status_code=503, detail=str(error)) from error
-
-
-@app.post("/api/ai/chat")
-def ai_chat(
-    payload: AiChatRequest,
-    session: str | None = Cookie(default=None),
-) -> StreamingResponse:
-    username = require_session(session)
-    question = payload.question.strip()
-    if not question:
-        raise HTTPException(status_code=422, detail="Question is required")
-    board = database.get_board_for_user(username)
-
-    def events():
-        chunks: list[str] = []
-        try:
-            for chunk in stream_structured_response(board, question, payload.history):
-                chunks.append(chunk)
-                yield f"event: text\ndata: {json.dumps(chunk)}\n\n"
-            structured_response = StructuredAiResponse.model_validate_json("".join(chunks))
-            updated_board = database.apply_operations(username, structured_response.operations)
-            yield f"event: complete\ndata: {json.dumps({'response': structured_response.response, 'board': updated_board})}\n\n"
-        except (OpenRouterError, ValueError, TypeError) as error:
-            yield f"event: error\ndata: {json.dumps(str(error))}\n\n"
-
-    return StreamingResponse(events(), media_type="text/event-stream")
 
 
 @app.get("/api/board")

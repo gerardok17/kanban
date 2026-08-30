@@ -25,7 +25,6 @@ This directory contains the existing Next.js Kanban Studio frontend. It is curre
 - `src/components/NewCardForm.tsx` owns the add-card form state and validation.
 - `src/lib/kanban.ts` defines `Card`, `Column`, and `BoardData`, provides `initialData`, and contains the pure `moveCard` and `createId` helpers.
 - `src/lib/api.ts` contains the same-origin API client for authenticated board reads and mutations.
-- `src/components/AIChatSidebar.tsx` renders the integrated streaming AI conversation and applies validated board updates from the server completion event.
 - `src/**/*.test.{ts,tsx}` contains Vitest tests; `src/test/setup.ts` configures Testing Library matchers.
 - `tests/kanban.spec.ts` contains Playwright browser tests.
 
@@ -47,10 +46,9 @@ Run these from `frontend/`:
 - Columns can be renamed in place.
 - Cards can be added and removed.
 - Cards can be reordered within a column or moved between columns with drag and drop.
-- There is no database or AI chat yet.
+- There is no database yet.
 - The Part 4 client gate stores a signed-in marker in `localStorage` for the frontend-only development server. The backend exposes HTTP-only session endpoints for the integrated application and future protected API routes.
 - On the integrated port `8000`, `AuthGate` creates and clears the backend session, and `KanbanBoard` loads and persists board changes through `src/lib/api.ts`. On port `3000`, the existing local-state demo remains available.
-- The AI sidebar is shown only in integrated remote mode, supports streaming/error/recovery states, and is intentionally absent from the frontend-only port `3000`.
 
 ## Conventions for planned work
 
@@ -58,4 +56,3 @@ Run these from `frontend/`:
 - Keep pure board transformations in `src/lib/kanban.ts` and keep network concerns out of presentational components.
 - Prefer integration tests for frontend/backend and user workflows; retain focused unit tests for pure helpers.
 - The frontend development server and existing Playwright configuration use port `3000`. The Dockerized FastAPI application will use port `8000`.
-- OpenRouter credentials belong only in the backend and must never be exposed to browser code or static assets.
