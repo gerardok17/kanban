@@ -1,12 +1,10 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 :root {
-  /* hopeland2-inspired palette */
   --accent-yellow: #fccf00;
   --primary-blue: #009cda;
   --accent-green: #45af35;
   --accent-red: #e62310;
-  /* button/action accent (hopeland2 uses green for primary actions) */
   --secondary-purple: #45af35;
   --navy-dark: #1c366b;
   --gray-text: #5a6b8c;
@@ -17,9 +15,11 @@
   --stroke: rgba(3, 33, 71, 0.1);
   --shadow: 0 18px 40px rgba(3, 33, 71, 0.16);
 
-  /* hopeland2 dark glass (cards, header, login, sidebar) */
+  /* dark glass (cards, header, login, sidebar) */
   --card-dark: rgba(4, 21, 81, 0.78);
   --card-border-light: rgba(255, 255, 255, 0.12);
+
+  --card-white: #ffffffc7;
 }
 
 @theme inline {
@@ -35,10 +35,10 @@
 body {
   background: var(--surface);
   color: var(--navy-dark);
-  font-family: var(--font-body), "Segoe UI", sans-serif;
+  font-family: var(--font-body), 'Segoe UI', sans-serif;
   margin: 0;
 }
 
 .font-display {
-  font-family: var(--font-display), "Segoe UI", sans-serif;
+  font-family: var(--font-display), 'Segoe UI', sans-serif;
 }
