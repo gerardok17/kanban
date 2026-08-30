@@ -50,24 +50,3 @@ export const moveCard = (cardId: string, columnId: string, position: number) =>
     method: "POST",
     body: JSON.stringify({ columnId, position }),
   });
-
-export const streamChat = (
-  question: string,
-  history: { role: string; content: string }[],
-  signal?: AbortSignal
-) =>
-  fetch("/api/ai/chat", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ question, history }),
-    signal,
-  }).then((response) => {
-    if (!response.ok) {
-      const error = new Error("The AI request could not be started.") as Error & {
-        status?: number;
-      };
-      error.status = response.status;
-      throw error;
-    }
-    return response;
-  });

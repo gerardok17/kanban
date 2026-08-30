@@ -1,14 +1,12 @@
-# Kanban — AI-Powered Project Management App
+# Kanban — Project Management App
 
 A full-stack Kanban project-management web app: a board with drag-and-drop
-cards, inline editing, and an AI assistant sidebar that can create, edit, and
-move cards on your behalf. Runs locally in a single Docker container.
+cards and inline editing. Runs locally in a single Docker container.
 
 ## Features
 
 - Kanban board with fixed, renameable columns
 - Create, edit, and drag-and-drop cards between columns
-- AI chat sidebar that can create / edit / move one or more cards
 - Single-user sign-in (MVP), with a database schema ready for multiple users
 
 ## Tech stack
@@ -16,19 +14,11 @@ move cards on your behalf. Runs locally in a single Docker container.
 - **Frontend:** Next.js (TypeScript)
 - **Backend:** Python + FastAPI (also serves the static Next.js build at `/`)
 - **Database:** SQLite (created automatically on first run)
-- **AI:** OpenRouter
 - **Packaging:** Docker, with `uv` as the Python package manager
 
 ## Running locally
 
-Requires Docker. Create a `.env` file in the project root with your OpenRouter
-key:
-
-```
-OPENROUTER_API_KEY=your_key_here
-```
-
-Then start the app with the script for your OS (from `scripts/`):
+Requires Docker. Start the app with the script for your OS (from `scripts/`):
 
 ```bash
 sh scripts/start-mac.sh      # macOS

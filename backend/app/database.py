@@ -4,15 +4,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from .structured_ai import (
-    BoardOperation,
-    CreateCardOperation,
-    DeleteCardOperation,
-    EditCardOperation,
-    MoveCardOperation,
-    RenameColumnOperation,
-)
-
 
 DEFAULT_DATA_DIR = Path(os.getenv("DATA_DIR", "/app/data"))
 DATABASE_PATH = DEFAULT_DATA_DIR / "kanban.sqlite3"
@@ -331,88 +322,3 @@ def normalize_positions(connection: sqlite3.Connection, board_id: str) -> None:
                 "UPDATE card_positions SET position = ? WHERE board_id = ? AND card_id = ?",
                 (position, board_id, card["card_id"]),
             )
-
-
-def apply_operations(username: str, operations: list[BoardOperation]) -> dict[str, Any]:
-    with connect() as connection:
-        board_id = board_id_for_user(connection, username)
-        now = utc_now()
-        for operation in operations:
-            if isinstance(operation, RenameColumnOperation):
-                title = operation.title.strip()
-                result = connection.execute(
-                    "UPDATE columns SET title = ? WHERE id = ? AND board_id = ?",
-                    (title, operation.columnId, board_id),
-                )
-                if not title or result.rowcount == 0:
-                    raise ValueError("Invalid column rename")
-            elif isinstance(operation, CreateCardOperation):
-                title = operation.title.strip()
-                column = connection.execute(
-                    "SELECT id FROM columns WHERE id = ? AND board_id = ?",
-                    (operation.columnId, board_id),
-                ).fetchone()
-                if not title or column is None:
-                    raise ValueError("Invalid card creation")
-                card_id = f"ai-{token_for_operation(operation.title)}"
-                if connection.execute("SELECT id FROM cards WHERE id = ?", (card_id,)).fetchone():
-                    raise ValueError("Generated card ID already exists")
-                connection.execute(
-                    "INSERT INTO cards(id, board_id, title, details, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-                    (card_id, board_id, title, operation.details, now, now),
-                )
-                position = connection.execute(
-                    "SELECT COALESCE(MAX(position) + 1, 0) AS position FROM card_positions WHERE column_id = ?",
-                    (operation.columnId,),
-                ).fetchone()["position"]
-                connection.execute(
-                    "INSERT INTO card_positions(board_id, column_id, card_id, position) VALUES (?, ?, ?, ?)",
-                    (board_id, operation.columnId, card_id, position),
-                )
-            elif isinstance(operation, EditCardOperation):
-                title = operation.title.strip()
-                result = connection.execute(
-                    "UPDATE cards SET title = ?, details = ?, updated_at = ? WHERE id = ? AND board_id = ?",
-                    (title, operation.details, now, operation.cardId, board_id),
-                )
-                if not title or result.rowcount == 0:
-                    raise ValueError("Invalid card edit")
-            elif isinstance(operation, DeleteCardOperation):
-                result = connection.execute(
-                    "DELETE FROM cards WHERE id = ? AND board_id = ?",
-                    (operation.cardId, board_id),
-                )
-                if result.rowcount == 0:
-                    raise ValueError("Invalid card deletion")
-                normalize_positions(connection, board_id)
-            elif isinstance(operation, MoveCardOperation):
-                _move_card_in_connection(connection, board_id, operation.cardId, operation.columnId, operation.position)
-        connection.execute("UPDATE boards SET updated_at = ? WHERE id = ?", (now, board_id))
-    return get_board_for_user(username)
-
-
-def token_for_operation(title: str) -> str:
-    import hashlib
-
-    return hashlib.sha256(title.encode()).hexdigest()[:16]
-
-
-def _move_card_in_connection(
-    connection: sqlite3.Connection, board_id: str, card_id: str, column_id: str, position: int
-) -> None:
-    card = connection.execute(
-        "SELECT card_id FROM card_positions WHERE card_id = ? AND board_id = ?", (card_id, board_id)
-    ).fetchone()
-    column = connection.execute(
-        "SELECT id FROM columns WHERE id = ? AND board_id = ?", (column_id, board_id)
-    ).fetchone()
-    if card is None or column is None:
-        raise ValueError("Invalid card move")
-    connection.execute("DELETE FROM card_positions WHERE card_id = ? AND board_id = ?", (card_id, board_id))
-    normalize_positions(connection, board_id)
-    count = connection.execute("SELECT COUNT(*) AS count FROM card_positions WHERE column_id = ?", (column_id,)).fetchone()["count"]
-    insert_position = min(position, count)
-    connection.execute("UPDATE card_positions SET position = position + 1000000 WHERE column_id = ? AND position >= ?", (column_id, insert_position))
-    connection.execute("UPDATE card_positions SET position = position - 999999 WHERE column_id = ? AND position >= ?", (column_id, insert_position + 1000000))
-    connection.execute("INSERT INTO card_positions(board_id, column_id, card_id, position) VALUES (?, ?, ?, ?)", (board_id, column_id, card_id, insert_position))
-    normalize_positions(connection, board_id)
