@@ -179,8 +179,8 @@ export const KanbanBoard = ({
   }
 
   return (
-    <div className='relative'>
-      <nav className='sticky top-0 z-50 w-full border-b border-[var(--card-border-light)] bg-[var(--card-dark)] shadow-[0_4px_20px_rgba(0,0,0,0.16)] backdrop-blur'>
+    <div className='relative h-screen overflow-hidden'>
+      <nav className='absolute inset-x-0 top-0 z-50 border-b border-[var(--card-border-light)] bg-[var(--card-dark)] shadow-[0_4px_20px_rgba(0,0,0,0.16)] backdrop-blur'>
         <div className='mx-auto flex h-20 max-w-[1500px] items-center justify-between px-6'>
           <span className='font-display text-2xl font-semibold text-[var(--accent-yellow)]'>
             Kanban
@@ -197,7 +197,8 @@ export const KanbanBoard = ({
         </div>
       </nav>
 
-      <main className='relative mx-auto flex min-h-screen max-w-[1500px] flex-col gap-10 px-6 pb-16 pt-10'>
+      <div className='h-full overflow-y-auto pt-20 [scrollbar-gutter:stable]'>
+      <main className='relative mx-auto flex max-w-[1500px] flex-col gap-10 px-6 pb-16 pt-10'>
         {error ? (
           <p
             role='alert'
@@ -234,6 +235,7 @@ export const KanbanBoard = ({
           </DragOverlay>
         </DndContext>
       </main>
+      </div>
     </div>
   )
 }
