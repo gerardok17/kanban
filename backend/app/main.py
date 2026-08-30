@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from pathlib import Path
 from secrets import token_urlsafe
 
@@ -6,9 +7,18 @@ from pydantic import BaseModel
 from fastapi.staticfiles import StaticFiles
 from . import database
 
-app = FastAPI(title="Project Management MVP")
-sessions: set[str] = set()
-database.initialize_database()
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    # Create tables and seed on startup — not at import, so the module can be
+    # imported without a live database.
+    database.initialize_database()
+    yield
+
+
+app = FastAPI(title="Project Management MVP", lifespan=lifespan)
+# In-memory session tokens mapped to their username (cleared on restart).
+sessions: dict[str, str] = {}
 
 
 class LoginRequest(BaseModel):
@@ -39,18 +49,19 @@ class CardMoveRequest(BaseModel):
 def require_session(session: str | None) -> str:
     if session is None or session not in sessions:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-    return "user"
+    return sessions[session]
 
 
 @app.post("/api/auth/login")
 def login(payload: LoginRequest, response: Response) -> dict[str, str]:
-    if payload.username != "user" or payload.password != "password":
+    username = database.authenticate(payload.username, payload.password)
+    if username is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
     session = token_urlsafe(32)
-    sessions.add(session)
+    sessions[session] = username
     response.set_cookie("session", session, httponly=True, samesite="lax", max_age=86400)
-    return {"username": "user"}
+    return {"username": username}
 
 
 @app.get("/api/auth/session")
@@ -61,7 +72,7 @@ def get_session(session: str | None = Cookie(default=None)) -> dict[str, str]:
 @app.post("/api/auth/logout")
 def logout(response: Response, session: str | None = Cookie(default=None)) -> dict[str, str]:
     if session is not None:
-        sessions.discard(session)
+        sessions.pop(session, None)
     response.delete_cookie("session")
     return {"status": "signed_out"}
 

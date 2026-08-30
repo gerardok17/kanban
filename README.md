@@ -13,12 +13,14 @@ cards and inline editing. Runs locally in a single Docker container.
 
 - **Frontend:** Next.js (TypeScript)
 - **Backend:** Python + FastAPI (also serves the static Next.js build at `/`)
-- **Database:** SQLite (created automatically on first run)
+- **Database:** MariaDB (the shared `homelab-db` container), via PyMySQL
 - **Packaging:** Docker, with `uv` as the Python package manager
 
 ## Running locally
 
-Requires Docker. Start the app with the script for your OS (from `scripts/`):
+Requires Docker and the shared `homelab-db` MariaDB container. Copy `.env.example`
+to `.env` and set the `MYSQL_*` values, then start the app with the script for your
+OS (from `scripts/`):
 
 ```bash
 sh scripts/start-mac.sh      # macOS
