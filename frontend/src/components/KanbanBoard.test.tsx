@@ -41,6 +41,9 @@ describe("KanbanBoard", () => {
     });
     await userEvent.click(deleteButton);
 
+    // A confirmation dialog appears; confirm the deletion.
+    await userEvent.click(screen.getByRole("button", { name: "Delete" }));
+
     expect(within(column).queryByText("New card")).not.toBeInTheDocument();
   });
 });

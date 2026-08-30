@@ -32,11 +32,19 @@
   box-sizing: border-box;
 }
 
+html,
+body {
+  height: 100%;
+}
+
 body {
   background: var(--surface);
   color: var(--navy-dark);
   font-family: var(--font-body), 'Segoe UI', sans-serif;
   margin: 0;
+  /* No page-level scroll: the navbar stays fixed and only the content area
+     below it scrolls (see the scroll container in KanbanBoard). */
+  overflow: hidden;
 }
 
 .font-display {

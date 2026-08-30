@@ -1,7 +1,9 @@
+import { useState } from 'react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import clsx from 'clsx'
 import type { Card } from '@/lib/kanban'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 
 type KanbanCardProps = {
   card: Card
@@ -9,6 +11,7 @@ type KanbanCardProps = {
 }
 
 export const KanbanCard = ({ card, onDelete }: KanbanCardProps) => {
+  const [confirmOpen, setConfirmOpen] = useState(false)
   const {
     attributes,
     listeners,
@@ -45,13 +48,41 @@ export const KanbanCard = ({ card, onDelete }: KanbanCardProps) => {
         </div>
         <button
           type='button'
-          onClick={() => onDelete(card.id)}
-          className='rounded-full border border-white/15 px-2 py-1 text-xs font-semibold text-black/60 transition hover:border-[var(--primary-blue)] hover:text-black/80'
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={() => setConfirmOpen(true)}
+          className='rounded-full border border-white/15 p-2 text-black/50 transition hover:border-[var(--accent-red)] hover:text-[var(--accent-red)]'
           aria-label={`Delete ${card.title}`}
         >
-          Remove
+          <svg
+            viewBox='0 0 24 24'
+            fill='none'
+            stroke='currentColor'
+            strokeWidth='2'
+            strokeLinecap='round'
+            strokeLinejoin='round'
+            className='h-4 w-4'
+            aria-hidden='true'
+          >
+            <path d='M3 6h18' />
+            <path d='M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2' />
+            <path d='M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6' />
+            <path d='M10 11v6' />
+            <path d='M14 11v6' />
+          </svg>
         </button>
       </div>
+      <ConfirmDialog
+        open={confirmOpen}
+        title='Delete card'
+        message={`"${card.title}" will be permanently removed.`}
+        confirmLabel='Delete'
+        cancelLabel='Cancel'
+        onConfirm={() => {
+          onDelete(card.id)
+          setConfirmOpen(false)
+        }}
+        onCancel={() => setConfirmOpen(false)}
+      />
     </article>
   )
 }
