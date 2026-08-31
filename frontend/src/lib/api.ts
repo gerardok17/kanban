@@ -50,3 +50,26 @@ export const moveCard = (cardId: string, columnId: string, position: number) =>
     method: "POST",
     body: JSON.stringify({ columnId, position }),
   });
+
+export type BoardSummary = {
+  id: string;
+  title: string;
+  position: number;
+};
+
+// The API returns the board with its id/title, which BoardData itself omits.
+export type Board = BoardData & { id: string; title: string };
+
+export const listBoards = () => request<BoardSummary[]>("/api/boards");
+
+export const getBoardById = (boardId: string) =>
+  request<Board>(`/api/boards/${boardId}`);
+
+export const createBoard = (title: string) =>
+  request<Board>("/api/boards", {
+    method: "POST",
+    body: JSON.stringify({ title }),
+  });
+
+export const deleteBoard = (boardId: string) =>
+  request<BoardSummary[]>(`/api/boards/${boardId}`, { method: "DELETE" });

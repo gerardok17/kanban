@@ -94,6 +94,12 @@ def read_health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.get("/api/users")
+def list_users(session: str | None = Cookie(default=None)) -> list[dict]:
+    require_session(session)
+    return database.list_users()
+
+
 @app.get("/api/boards")
 def list_boards(session: str | None = Cookie(default=None)) -> list[dict]:
     username = require_session(session)

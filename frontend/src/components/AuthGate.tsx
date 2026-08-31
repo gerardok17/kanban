@@ -1,7 +1,7 @@
 'use client'
 
 import { FormEvent, useState, useSyncExternalStore } from 'react'
-import { KanbanBoard } from '@/components/KanbanBoard'
+import { AppShell } from '@/components/AppShell'
 
 const credentials = { username: 'gerardok17', password: 'gerardok17' }
 const authEvent = 'kanban-auth-change'
@@ -81,63 +81,48 @@ export const AuthGate = () => {
   }
 
   if (isSignedIn) {
-    return <KanbanBoard onLogout={handleLogout} remote={usesBackendSession()} />
+    return <AppShell onLogout={handleLogout} remote={usesBackendSession()} />
   }
 
   return (
-    <main className='flex min-h-screen items-center justify-center px-6 py-12'>
-      <form
-        onSubmit={handleSubmit}
-        className='w-full max-w-md rounded-[32px] border border-[var(--card-border-light)] bg-[var(--card-dark)] p-8 shadow-[var(--shadow)] backdrop-blur'
-      >
-        <p className='text-xs font-semibold uppercase tracking-[0.35em] text-white/55'>
-          Project workspace
-        </p>
-        <h1 className='mt-3 font-display text-4xl font-semibold text-[var(--accent-yellow)]'>
-          Sign in
-        </h1>
-        <p className='mt-3 text-sm leading-6 text-white/70'>
-          Sign in to open your Kanban board.
-        </p>
-        <div className='mt-8 space-y-4'>
-          <label className='block text-sm font-semibold text-white/80'>
+    <div className='admin-login-page'>
+      <div className='admin-login-card'>
+        <h1>Sign in</h1>
+        <p>Sign in to open your Kanban board.</p>
+
+        {error ? <div className='login-error'>{error}</div> : null}
+
+        <form onSubmit={handleSubmit} className='login-form'>
+          <label>
             Username
             <input
+              type='text'
               value={username}
               onChange={(event) => setUsername(event.target.value)}
-              className='mt-2 w-full rounded-xl border border-white/20 bg-white/10 px-3 py-3 text-sm font-medium text-white outline-none placeholder:text-white/40 focus:border-[var(--accent-yellow)]'
+              placeholder='username'
               autoComplete='username'
               required
+              autoFocus
             />
           </label>
-          <label className='block text-sm font-semibold text-white/80'>
+
+          <label>
             Password
             <input
               type='password'
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              className='mt-2 w-full rounded-xl border border-white/20 bg-white/10 px-3 py-3 text-sm font-medium text-white outline-none placeholder:text-white/40 focus:border-[var(--accent-yellow)]'
+              placeholder='password'
               autoComplete='current-password'
               required
             />
           </label>
-        </div>
-        {error ? (
-          <p
-            role='alert'
-            className='mt-4 text-sm font-semibold text-[var(--accent-yellow)]'
-          >
-            {error}
-          </p>
-        ) : null}
-        <button
-          type='submit'
-          disabled={isSubmitting}
-          className='mt-6 w-full rounded-full bg-[var(--secondary-purple)] px-4 py-3 text-sm font-semibold uppercase tracking-wide text-white transition hover:brightness-110'
-        >
-          {isSubmitting ? 'Signing in...' : 'Sign in'}
-        </button>
-      </form>
-    </main>
+
+          <button type='submit' className='login-button' disabled={isSubmitting}>
+            {isSubmitting ? 'Signing in...' : 'Sign in'}
+          </button>
+        </form>
+      </div>
+    </div>
   )
 }
