@@ -50,3 +50,31 @@ body {
 .font-display {
   font-family: var(--font-display), 'Segoe UI', sans-serif;
 }
+
+.admin-banner-logo-link {
+  display: inline-flex;
+  align-items: center;
+  margin-left: -70px;
+}
+
+.admin-banner-logo-link .logo {
+  width: 18rem;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .admin-banner-logo-link .logo {
+    width: 12rem;
+  }
+
+  .admin-banner-link {
+    padding: 0.5rem 0.7rem;
+    font-size: 0.9rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .admin-banner-logo-link .logo {
+    width: 10rem;
+  }
+}

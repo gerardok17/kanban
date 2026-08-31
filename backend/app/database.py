@@ -191,9 +191,20 @@ def authenticate(username: str, password: str) -> str | None:
     return user["username"]
 
 
+# --- Ownership helpers -----------------------------------------------------
+# Every mutation resolves the affected board from the target entity and confirms
+# it belongs to the signed-in user, so client-supplied IDs are never trusted.
+
+
+def _user_id(connection: Connection, username: str) -> str:
+    row = _one(connection, "SELECT id FROM users WHERE username = %s", (username,))
+    if row is None:
+        raise ValueError("User not found")
+    return row["id"]
+
+
 def board_id_for_user(connection: Connection, username: str) -> str:
-    # Phase 1: a user still resolves to a single board (the first one). Phase 2
-    # replaces these callers with explicit board_id + ownership checks.
+    """The user's first board — backs the legacy GET /api/board default."""
     board = _one(
         connection,
         """
@@ -210,36 +221,156 @@ def board_id_for_user(connection: Connection, username: str) -> str:
     return board["id"]
 
 
-def get_board_for_user(username: str) -> dict[str, Any]:
+def _assert_board_owned(connection: Connection, username: str, board_id: str) -> None:
+    row = _one(
+        connection,
+        """
+        SELECT boards.id FROM boards
+        JOIN users ON users.id = boards.user_id
+        WHERE boards.id = %s AND users.username = %s
+        """,
+        (board_id, username),
+    )
+    if row is None:
+        raise ValueError("Board not found")
+
+
+def _board_id_for_column(connection: Connection, username: str, column_id: str) -> str:
+    row = _one(
+        connection,
+        """
+        SELECT `columns`.board_id FROM `columns`
+        JOIN boards ON boards.id = `columns`.board_id
+        JOIN users ON users.id = boards.user_id
+        WHERE `columns`.id = %s AND users.username = %s
+        """,
+        (column_id, username),
+    )
+    if row is None:
+        raise ValueError("Column not found")
+    return row["board_id"]
+
+
+def _board_id_for_card(connection: Connection, username: str, card_id: str) -> str:
+    row = _one(
+        connection,
+        """
+        SELECT cards.board_id FROM cards
+        JOIN boards ON boards.id = cards.board_id
+        JOIN users ON users.id = boards.user_id
+        WHERE cards.id = %s AND users.username = %s
+        """,
+        (card_id, username),
+    )
+    if row is None:
+        raise ValueError("Card not found")
+    return row["board_id"]
+
+
+# --- Board CRUD ------------------------------------------------------------
+
+
+def list_boards(username: str) -> list[dict[str, Any]]:
     with connect() as connection:
-        board = _one(
+        boards = _all(
             connection,
             """
-            SELECT boards.id, boards.title FROM boards
+            SELECT boards.id, boards.title, boards.position FROM boards
             JOIN users ON users.id = boards.user_id
             WHERE users.username = %s
             ORDER BY boards.position, boards.created_at
-            LIMIT 1
             """,
             (username,),
         )
-        if board is None:
-            raise ValueError("Board not found")
-        columns = _all(
+    return [
+        {"id": b["id"], "title": b["title"], "position": b["position"]} for b in boards
+    ]
+
+
+def create_board(username: str, board_id: str, title: str) -> str:
+    with connect() as connection:
+        user_id = _user_id(connection, username)
+        now = utc_now()
+        next_position = _one(
             connection,
-            "SELECT id, title FROM `columns` WHERE board_id = %s ORDER BY position",
-            (board["id"],),
-        )
-        cards = _all(
+            "SELECT COALESCE(MAX(position) + 1, 0) AS position FROM boards WHERE user_id = %s",
+            (user_id,),
+        )["position"]
+        _exec(
             connection,
-            "SELECT id, title, details FROM cards WHERE board_id = %s",
-            (board["id"],),
+            "INSERT INTO boards(id, user_id, title, position, created_at, updated_at) VALUES (%s, %s, %s, %s, %s, %s)",
+            (board_id, user_id, title, next_position, now, now),
         )
-        positions = _all(
+        with connection.cursor() as cursor:
+            cursor.executemany(
+                "INSERT INTO `columns`(id, board_id, title, position) VALUES (%s, %s, %s, %s)",
+                [
+                    (f"{board_id}-{col_id}", board_id, col_title, col_pos)
+                    for col_id, col_title, col_pos in DEFAULT_COLUMNS
+                ],
+            )
+    return board_id
+
+
+def rename_board(username: str, board_id: str, title: str) -> None:
+    with connect() as connection:
+        _assert_board_owned(connection, username, board_id)
+        _exec(
             connection,
-            "SELECT column_id, card_id, position FROM card_positions WHERE board_id = %s ORDER BY position",
-            (board["id"],),
+            "UPDATE boards SET title = %s, updated_at = %s WHERE id = %s",
+            (title, utc_now(), board_id),
         )
+
+
+def delete_board(username: str, board_id: str) -> None:
+    with connect() as connection:
+        _assert_board_owned(connection, username, board_id)
+        remaining = _one(
+            connection,
+            """
+            SELECT COUNT(*) AS count FROM boards
+            JOIN users ON users.id = boards.user_id
+            WHERE users.username = %s
+            """,
+            (username,),
+        )["count"]
+        if remaining <= 1:
+            raise ValueError("Cannot delete the only board")
+        _exec(connection, "DELETE FROM boards WHERE id = %s", (board_id,))
+
+
+# --- Board read ------------------------------------------------------------
+
+
+def get_board_for_user(username: str) -> dict[str, Any]:
+    with connect() as connection:
+        board_id = board_id_for_user(connection, username)
+        return _read_board(connection, board_id)
+
+
+def get_board(username: str, board_id: str) -> dict[str, Any]:
+    with connect() as connection:
+        _assert_board_owned(connection, username, board_id)
+        return _read_board(connection, board_id)
+
+
+def _read_board(connection: Connection, board_id: str) -> dict[str, Any]:
+    board = _one(connection, "SELECT id, title FROM boards WHERE id = %s", (board_id,))
+    columns = _all(
+        connection,
+        "SELECT id, title FROM `columns` WHERE board_id = %s ORDER BY position",
+        (board_id,),
+    )
+    cards = _all(
+        connection,
+        "SELECT id, title, details FROM cards WHERE board_id = %s",
+        (board_id,),
+    )
+    positions = _all(
+        connection,
+        "SELECT column_id, card_id, position FROM card_positions WHERE board_id = %s ORDER BY position",
+        (board_id,),
+    )
 
     card_ids_by_column: dict[str, list[str]] = {column["id"]: [] for column in columns}
     for position in positions:
@@ -267,35 +398,30 @@ def get_board_for_user(username: str) -> dict[str, Any]:
     }
 
 
-def rename_column(username: str, column_id: str, title: str) -> None:
+# --- Column / card mutations (return the affected board id) ----------------
+
+
+def rename_column(username: str, column_id: str, title: str) -> str:
     with connect() as connection:
-        board_id = board_id_for_user(connection, username)
-        changed = _exec(
+        board_id = _board_id_for_column(connection, username, column_id)
+        _exec(
             connection,
             "UPDATE `columns` SET title = %s WHERE id = %s AND board_id = %s",
             (title, column_id, board_id),
         )
-        if changed == 0:
-            raise ValueError("Column not found")
         _exec(
             connection,
             "UPDATE boards SET updated_at = %s WHERE id = %s",
             (utc_now(), board_id),
         )
+    return board_id
 
 
 def create_card(
     username: str, card_id: str, column_id: str, title: str, details: str
-) -> None:
+) -> str:
     with connect() as connection:
-        board_id = board_id_for_user(connection, username)
-        column = _one(
-            connection,
-            "SELECT id FROM `columns` WHERE id = %s AND board_id = %s",
-            (column_id, board_id),
-        )
-        if column is None:
-            raise ValueError("Column not found")
+        board_id = _board_id_for_column(connection, username, column_id)
         existing_card = _one(
             connection, "SELECT id FROM cards WHERE id = %s", (card_id,)
         )
@@ -322,57 +448,51 @@ def create_card(
             "UPDATE boards SET updated_at = %s WHERE id = %s",
             (now, board_id),
         )
+    return board_id
 
 
-def update_card(username: str, card_id: str, title: str, details: str | None) -> None:
+def update_card(username: str, card_id: str, title: str, details: str | None) -> str:
     with connect() as connection:
-        board_id = board_id_for_user(connection, username)
-        changed = _exec(
+        board_id = _board_id_for_card(connection, username, card_id)
+        _exec(
             connection,
             "UPDATE cards SET title = %s, details = %s, updated_at = %s WHERE id = %s AND board_id = %s",
             (title, details, utc_now(), card_id, board_id),
         )
-        if changed == 0:
-            raise ValueError("Card not found")
         _exec(
             connection,
             "UPDATE boards SET updated_at = %s WHERE id = %s",
             (utc_now(), board_id),
         )
+    return board_id
 
 
-def delete_card(username: str, card_id: str) -> None:
+def delete_card(username: str, card_id: str) -> str:
     with connect() as connection:
-        board_id = board_id_for_user(connection, username)
-        changed = _exec(
+        board_id = _board_id_for_card(connection, username, card_id)
+        _exec(
             connection,
             "DELETE FROM cards WHERE id = %s AND board_id = %s",
             (card_id, board_id),
         )
-        if changed == 0:
-            raise ValueError("Card not found")
         _exec(
             connection,
             "UPDATE boards SET updated_at = %s WHERE id = %s",
             (utc_now(), board_id),
         )
         normalize_positions(connection, board_id)
+    return board_id
 
 
-def move_card(username: str, card_id: str, column_id: str, position: int) -> None:
+def move_card(username: str, card_id: str, column_id: str, position: int) -> str:
     with connect() as connection:
-        board_id = board_id_for_user(connection, username)
-        card = _one(
-            connection,
-            "SELECT card_id FROM card_positions WHERE card_id = %s AND board_id = %s",
-            (card_id, board_id),
-        )
+        board_id = _board_id_for_card(connection, username, card_id)
         column = _one(
             connection,
             "SELECT id FROM `columns` WHERE id = %s AND board_id = %s",
             (column_id, board_id),
         )
-        if card is None or column is None or position < 0:
+        if column is None or position < 0:
             raise ValueError("Invalid card move")
         _exec(
             connection,
@@ -409,6 +529,7 @@ def move_card(username: str, card_id: str, column_id: str, position: int) -> Non
             "UPDATE boards SET updated_at = %s WHERE id = %s",
             (utc_now(), board_id),
         )
+    return board_id
 
 
 def normalize_positions(connection: Connection, board_id: str) -> None:
