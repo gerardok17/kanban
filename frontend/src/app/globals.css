@@ -54,7 +54,10 @@ body {
 .admin-banner-logo-link {
   display: inline-flex;
   align-items: center;
-  margin-left: -70px;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
 }
 
 .admin-banner-logo-link .logo {
@@ -77,4 +80,157 @@ body {
   .admin-banner-logo-link .logo {
     width: 10rem;
   }
+}
+
+/* Banner tabs (ported from hopeland2 admin banner) */
+.admin-banner-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.admin-banner-link {
+  display: inline-block;
+  padding: 0.6rem 1rem;
+  color: #fff;
+  text-decoration: none;
+  border-radius: 0.5rem;
+  border: 1px solid transparent;
+  font-size: 1rem;
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s ease;
+}
+
+.admin-banner-link:hover {
+  background-color: rgba(255, 255, 255, 0.12);
+}
+
+.admin-banner-link.active {
+  background-color: rgba(255, 255, 255, 0.12);
+}
+
+/* Content pages (ported from hopeland2 .admin-page) */
+.admin-page {
+  background-color: #fff;
+  color: var(--navy-dark);
+  border-radius: 0.75rem;
+  padding: 2rem;
+  box-shadow: var(--shadow);
+}
+
+.admin-page h1 {
+  color: var(--navy-dark);
+  border-bottom: 3px solid var(--primary-blue);
+  padding-bottom: 1rem;
+  margin-bottom: 2rem;
+  font-family: var(--font-display), 'Segoe UI', sans-serif;
+}
+
+.admin-page p {
+  color: var(--gray-text);
+  font-size: 1.1rem;
+}
+
+.users-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.users-table th,
+.users-table td {
+  text-align: left;
+  padding: 0.6rem 0.8rem;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.users-table th {
+  color: var(--navy-dark);
+  font-weight: 600;
+}
+
+/* Login / sign-in (ported from hopeland2 admin login) */
+.admin-login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--surface);
+  padding: 2rem;
+}
+
+.admin-login-card {
+  width: 100%;
+  max-width: 420px;
+  background-color: #fff;
+  border-radius: 0.75rem;
+  padding: 2.25rem;
+  box-shadow: var(--shadow);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.admin-login-card h1 {
+  margin-bottom: 0.75rem;
+  color: var(--navy-dark);
+  font-family: var(--font-display), 'Segoe UI', sans-serif;
+}
+
+.admin-login-card p {
+  margin-bottom: 1.5rem;
+  color: var(--gray-text);
+}
+
+.login-error {
+  margin-bottom: 1rem;
+  color: var(--accent-red);
+  font-weight: 600;
+}
+
+.login-form {
+  display: grid;
+  gap: 1rem;
+}
+
+.login-form label {
+  display: grid;
+  gap: 0.5rem;
+  font-size: 0.95rem;
+  color: var(--gray-text);
+}
+
+.login-form input {
+  width: 100%;
+  padding: 0.9rem 1rem;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  background-color: #f9fafb;
+  color: var(--navy-dark);
+  transition: all 0.2s ease;
+}
+
+.login-form input:focus {
+  outline: none;
+  border-color: var(--primary-blue);
+  box-shadow: 0 0 0 4px rgba(0, 156, 218, 0.1);
+}
+
+.login-button {
+  padding: 0.95rem 1rem;
+  border: none;
+  border-radius: 0.5rem;
+  background-color: var(--primary-blue);
+  color: #fff;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.login-button:hover:not(:disabled) {
+  background-color: #0077b8;
+}
+
+.login-button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
 }

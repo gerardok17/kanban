@@ -191,6 +191,22 @@ def authenticate(username: str, password: str) -> str | None:
     return user["username"]
 
 
+def list_users() -> list[dict[str, Any]]:
+    with connect() as connection:
+        users = _all(
+            connection,
+            "SELECT id, username, created_at FROM users ORDER BY username",
+        )
+    return [
+        {
+            "id": user["id"],
+            "username": user["username"],
+            "created_at": user["created_at"].isoformat() if user["created_at"] else None,
+        }
+        for user in users
+    ]
+
+
 # --- Ownership helpers -----------------------------------------------------
 # Every mutation resolves the affected board from the target entity and confirms
 # it belongs to the signed-in user, so client-supplied IDs are never trusted.
