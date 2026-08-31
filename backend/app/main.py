@@ -46,6 +46,14 @@ class CardMoveRequest(BaseModel):
     position: int
 
 
+class BoardCreateRequest(BaseModel):
+    title: str
+
+
+class BoardRenameRequest(BaseModel):
+    title: str
+
+
 def require_session(session: str | None) -> str:
     if session is None or session not in sessions:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
@@ -86,6 +94,68 @@ def read_health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.get("/api/boards")
+def list_boards(session: str | None = Cookie(default=None)) -> list[dict]:
+    username = require_session(session)
+    return database.list_boards(username)
+
+
+@app.post("/api/boards", status_code=201)
+def create_board(
+    payload: BoardCreateRequest,
+    session: str | None = Cookie(default=None),
+) -> dict:
+    username = require_session(session)
+    title = payload.title.strip()
+    if not title:
+        raise HTTPException(status_code=422, detail="Board title is required")
+    board_id = f"board-{token_urlsafe(12)}"
+    database.create_board(username, board_id, title)
+    return database.get_board(username, board_id)
+
+
+@app.get("/api/boards/{board_id}")
+def read_board_by_id(
+    board_id: str,
+    session: str | None = Cookie(default=None),
+) -> dict:
+    username = require_session(session)
+    try:
+        return database.get_board(username, board_id)
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@app.patch("/api/boards/{board_id}")
+def rename_board(
+    board_id: str,
+    payload: BoardRenameRequest,
+    session: str | None = Cookie(default=None),
+) -> dict:
+    username = require_session(session)
+    title = payload.title.strip()
+    if not title:
+        raise HTTPException(status_code=422, detail="Board title is required")
+    try:
+        database.rename_board(username, board_id, title)
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    return database.get_board(username, board_id)
+
+
+@app.delete("/api/boards/{board_id}")
+def delete_board(
+    board_id: str,
+    session: str | None = Cookie(default=None),
+) -> list[dict]:
+    username = require_session(session)
+    try:
+        database.delete_board(username, board_id)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    return database.list_boards(username)
+
+
 @app.get("/api/board")
 def read_board(session: str | None = Cookie(default=None)) -> dict:
     username = require_session(session)
@@ -103,10 +173,10 @@ def rename_board_column(
     if not title:
         raise HTTPException(status_code=422, detail="Column title is required")
     try:
-        database.rename_column(username, column_id, title)
+        board_id = database.rename_column(username, column_id, title)
     except ValueError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
-    return database.get_board_for_user(username)
+    return database.get_board(username, board_id)
 
 
 @app.post("/api/board/cards", status_code=201)
@@ -120,10 +190,10 @@ def add_board_card(
         raise HTTPException(status_code=422, detail="Card title is required")
     card_id = token_urlsafe(12)
     try:
-        database.create_card(username, card_id, payload.columnId, title, payload.details.strip())
+        board_id = database.create_card(username, card_id, payload.columnId, title, payload.details.strip())
     except ValueError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
-    return database.get_board_for_user(username)
+    return database.get_board(username, board_id)
 
 
 @app.patch("/api/board/cards/{card_id}")
@@ -137,10 +207,10 @@ def edit_board_card(
     if not title:
         raise HTTPException(status_code=422, detail="Card title is required")
     try:
-        database.update_card(username, card_id, title, payload.details)
+        board_id = database.update_card(username, card_id, title, payload.details)
     except ValueError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
-    return database.get_board_for_user(username)
+    return database.get_board(username, board_id)
 
 
 @app.delete("/api/board/cards/{card_id}")
@@ -150,10 +220,10 @@ def remove_board_card(
 ) -> dict:
     username = require_session(session)
     try:
-        database.delete_card(username, card_id)
+        board_id = database.delete_card(username, card_id)
     except ValueError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
-    return database.get_board_for_user(username)
+    return database.get_board(username, board_id)
 
 
 @app.post("/api/board/cards/{card_id}/move")
@@ -164,10 +234,10 @@ def move_board_card(
 ) -> dict:
     username = require_session(session)
     try:
-        database.move_card(username, card_id, payload.columnId, payload.position)
+        board_id = database.move_card(username, card_id, payload.columnId, payload.position)
     except ValueError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
-    return database.get_board_for_user(username)
+    return database.get_board(username, board_id)
 
 
 frontend_directory = Path(__file__).resolve().parents[2] / "frontend"

@@ -22,6 +22,8 @@ import {
 } from '@/lib/api'
 import { createId, initialData, moveCard, type BoardData } from '@/lib/kanban'
 
+const logo = './main-logo.png'
+
 export const KanbanBoard = ({
   onLogout,
   remote = false,
@@ -182,9 +184,9 @@ export const KanbanBoard = ({
     <div className='relative h-screen overflow-hidden'>
       <nav className='absolute inset-x-0 top-0 z-50 border-b border-[var(--card-border-light)] bg-[var(--card-dark)] shadow-[0_4px_20px_rgba(0,0,0,0.16)] backdrop-blur'>
         <div className='mx-auto flex h-20 max-w-[1500px] items-center justify-between px-6'>
-          <span className='font-display text-2xl font-semibold text-[var(--accent-yellow)]'>
-            Kanban
-          </span>
+          <a href='./' className='admin-banner-logo-link'>
+            <img src={logo} alt='Kanban PM logo' className='logo' />
+          </a>
           {onLogout ? (
             <button
               type='button'
@@ -198,43 +200,43 @@ export const KanbanBoard = ({
       </nav>
 
       <div className='h-full overflow-y-auto pt-20 [scrollbar-gutter:stable]'>
-      <main className='relative mx-auto flex max-w-[1500px] flex-col gap-10 px-6 pb-16 pt-10'>
-        {error ? (
-          <p
-            role='alert'
-            className='text-sm font-semibold text-[var(--accent-red)]'
-          >
-            {error}
-          </p>
-        ) : null}
+        <main className='relative mx-auto flex max-w-[1500px] flex-col gap-10 px-6 pb-16 pt-10'>
+          {error ? (
+            <p
+              role='alert'
+              className='text-sm font-semibold text-[var(--accent-red)]'
+            >
+              {error}
+            </p>
+          ) : null}
 
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCorners}
-          onDragStart={handleDragStart}
-          onDragEnd={handleDragEnd}
-        >
-          <section className='grid gap-6 lg:grid-cols-5'>
-            {board.columns.map((column) => (
-              <KanbanColumn
-                key={column.id}
-                column={column}
-                cards={column.cardIds.map((cardId) => board.cards[cardId])}
-                onRename={handleRenameColumn}
-                onAddCard={handleAddCard}
-                onDeleteCard={handleDeleteCard}
-              />
-            ))}
-          </section>
-          <DragOverlay>
-            {activeCard ? (
-              <div className='w-[260px]'>
-                <KanbanCardPreview card={activeCard} />
-              </div>
-            ) : null}
-          </DragOverlay>
-        </DndContext>
-      </main>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCorners}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+          >
+            <section className='grid gap-6 lg:grid-cols-5'>
+              {board.columns.map((column) => (
+                <KanbanColumn
+                  key={column.id}
+                  column={column}
+                  cards={column.cardIds.map((cardId) => board.cards[cardId])}
+                  onRename={handleRenameColumn}
+                  onAddCard={handleAddCard}
+                  onDeleteCard={handleDeleteCard}
+                />
+              ))}
+            </section>
+            <DragOverlay>
+              {activeCard ? (
+                <div className='w-[260px]'>
+                  <KanbanCardPreview card={activeCard} />
+                </div>
+              ) : null}
+            </DragOverlay>
+          </DndContext>
+        </main>
       </div>
     </div>
   )
