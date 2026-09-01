@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { BoardsView } from '@/components/BoardsView'
+import { DashboardView } from '@/components/DashboardView'
 import { UsersView } from '@/components/UsersView'
 import { getSession } from '@/lib/api'
 
@@ -70,10 +71,7 @@ export const AppShell = ({ onLogout, remote = false }: AppShellProps) => {
       <div className='h-full overflow-y-auto pt-20 [scrollbar-gutter:stable]'>
         {view === 'home' ? (
           <main className='mx-auto max-w-[1500px] px-6 pb-16 pt-10'>
-            <div className='admin-page'>
-              <h1>Dashboard</h1>
-              <p>TODO</p>
-            </div>
+            <DashboardView onLogout={onLogout} remote={remote} />
           </main>
         ) : null}
 
