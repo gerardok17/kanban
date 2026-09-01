@@ -16,6 +16,7 @@ import { KanbanCardPreview } from '@/components/KanbanCardPreview'
 import {
   addCard,
   deleteCard,
+  editCard,
   getBoard,
   getBoardById,
   moveCard as moveRemoteCard,
@@ -156,6 +157,24 @@ export const KanbanBoard = ({
     }))
   }
 
+  const handleEditCard = (cardId: string, title: string, details: string) => {
+    if (remote) {
+      void applyRemoteChange(() => editCard(cardId, title, details))
+      return
+    }
+    setBoard((prev) => ({
+      ...prev,
+      cards: {
+        ...prev.cards,
+        [cardId]: {
+          ...prev.cards[cardId],
+          title,
+          details: details || 'No details yet.',
+        },
+      },
+    }))
+  }
+
   const handleDeleteCard = (columnId: string, cardId: string) => {
     if (remote) {
       void applyRemoteChange(() => deleteCard(cardId))
@@ -203,7 +222,7 @@ export const KanbanBoard = ({
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
       >
-        <section className='grid gap-6 lg:grid-cols-5'>
+        <section className='grid gap-3 lg:grid-cols-5'>
           {board.columns.map((column) => (
             <KanbanColumn
               key={column.id}
@@ -211,6 +230,7 @@ export const KanbanBoard = ({
               cards={column.cardIds.map((cardId) => board.cards[cardId])}
               onRename={handleRenameColumn}
               onAddCard={handleAddCard}
+              onEditCard={handleEditCard}
               onDeleteCard={handleDeleteCard}
             />
           ))}

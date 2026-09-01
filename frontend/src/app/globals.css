@@ -126,6 +126,8 @@ body {
   padding-bottom: 1rem;
   margin-bottom: 2rem;
   font-family: var(--font-display), 'Segoe UI', sans-serif;
+  font-size: 1.3rem;
+  font-weight: 700;
 }
 
 .admin-page p {

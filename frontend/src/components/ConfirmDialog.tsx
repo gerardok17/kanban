@@ -47,7 +47,7 @@ export const ConfirmDialog = ({
       onClick={onCancel}
     >
       <div
-        className='w-full max-w-sm rounded-2xl border border-[var(--card-border-light)] bg-[var(--card-white)] p-6 shadow-[0_20px_48px_rgba(3,33,71,0.4)]'
+        className='w-full max-w-sm rounded-xl border border-[var(--card-border-light)] bg-[var(--card-white)] p-6 shadow-[0_20px_48px_rgba(3,33,71,0.4)]'
         onClick={(event) => event.stopPropagation()}
       >
         <h3 className='font-display text-lg font-semibold text-[var(--navy-dark)]'>
