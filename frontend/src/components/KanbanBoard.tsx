@@ -7,7 +7,8 @@ import {
   PointerSensor,
   useSensor,
   useSensors,
-  closestCorners,
+  pointerWithin,
+  MeasuringStrategy,
   type DragEndEvent,
   type DragStartEvent,
 } from '@dnd-kit/core'
@@ -22,7 +23,13 @@ import {
   moveCard as moveRemoteCard,
   renameColumn,
 } from '@/lib/api'
-import { createId, initialData, moveCard, type BoardData } from '@/lib/kanban'
+import {
+  createId,
+  initialData,
+  moveCard,
+  visibleColumns,
+  type BoardData,
+} from '@/lib/kanban'
 
 export const KanbanBoard = ({
   onLogout,
@@ -218,12 +225,13 @@ export const KanbanBoard = ({
 
       <DndContext
         sensors={sensors}
-        collisionDetection={closestCorners}
+        collisionDetection={pointerWithin}
+        measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
       >
-        <section className='grid gap-3 lg:grid-cols-5'>
-          {board.columns.map((column) => (
+        <section className='grid gap-3 lg:grid-cols-4'>
+          {visibleColumns(board.columns).map((column) => (
             <KanbanColumn
               key={column.id}
               column={column}
