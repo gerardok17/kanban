@@ -5,9 +5,10 @@ import { KanbanBoard } from "@/components/KanbanBoard";
 const getFirstColumn = () => screen.getAllByTestId(/column-/i)[0];
 
 describe("KanbanBoard", () => {
-  it("renders five columns", () => {
+  it("renders the visible columns and hides col-review", () => {
     render(<KanbanBoard />);
-    expect(screen.getAllByTestId(/column-/i)).toHaveLength(5);
+    expect(screen.getAllByTestId(/column-/i)).toHaveLength(4);
+    expect(screen.queryByTestId("column-col-review")).not.toBeInTheDocument();
   });
 
   it("renames a column", async () => {

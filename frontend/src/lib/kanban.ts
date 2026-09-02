@@ -71,6 +71,20 @@ export const initialData: BoardData = {
   },
 };
 
+// Columns kept in the database but hidden from the UI, so they can be brought
+// back later without data loss. Matched by id suffix because new boards seed
+// their columns as `<boardId>-col-review` while the original starter board
+// uses the bare `col-review`.
+const HIDDEN_COLUMN_SUFFIXES = ["col-review"];
+
+export const isHiddenColumn = (columnId: string) =>
+  HIDDEN_COLUMN_SUFFIXES.some(
+    (suffix) => columnId === suffix || columnId.endsWith(`-${suffix}`)
+  );
+
+export const visibleColumns = (columns: Column[]) =>
+  columns.filter((column) => !isHiddenColumn(column.id));
+
 const isColumnId = (columns: Column[], id: string) =>
   columns.some((column) => column.id === id);
 

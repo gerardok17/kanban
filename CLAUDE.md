@@ -19,8 +19,6 @@ model) and `SETUP.md`. Each top-level directory also has an `AGENTS.md` with loc
 - `npm run build` - static export to `frontend/out/`
 - `npm run lint` - ESLint
 - `npm run test:unit` - Vitest (jsdom); single file: `npx vitest run src/lib/kanban.test.ts`; single test: `npx vitest run -t "moves a card"`
-- `npm run test:e2e` - Playwright; it auto-starts the port `3000` dev server. Single test: `npx playwright test -g "sign in"`
-- `npm run test:all` - unit then e2e
 
 ### Backend (run from `backend/`)
 

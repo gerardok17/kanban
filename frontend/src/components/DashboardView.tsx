@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { getBoardById, listBoards, type Board } from '@/lib/api'
-import { initialData } from '@/lib/kanban'
+import { initialData, visibleColumns } from '@/lib/kanban'
 
 type DashboardViewProps = {
   onLogout?: () => void
@@ -21,15 +21,18 @@ type BoardStats = {
 // returns id/title/position, so the dashboard fetches every board once and
 // aggregates client-side; a dedicated /api/stats endpoint would be the upgrade
 // if the board count ever grew large.
-const toStats = (board: Board): BoardStats => ({
-  id: board.id,
-  title: board.title,
-  total: board.columns.reduce((sum, column) => sum + column.cardIds.length, 0),
-  byStatus: board.columns.map((column) => ({
-    title: column.title,
-    count: column.cardIds.length,
-  })),
-})
+const toStats = (board: Board): BoardStats => {
+  const columns = visibleColumns(board.columns)
+  return {
+    id: board.id,
+    title: board.title,
+    total: columns.reduce((sum, column) => sum + column.cardIds.length, 0),
+    byStatus: columns.map((column) => ({
+      title: column.title,
+      count: column.cardIds.length,
+    })),
+  }
+}
 
 const StatTile = ({ label, value }: { label: string; value: number }) => (
   <div className='flex flex-col gap-1 rounded-xl border border-[var(--card-border-light)] bg-[var(--card-white)] px-5 py-4 shadow-[var(--shadow)]'>
