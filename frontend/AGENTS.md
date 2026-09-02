@@ -11,7 +11,6 @@ This directory contains the existing Next.js Kanban Studio frontend. It is curre
 - Tailwind CSS `4`
 - `@dnd-kit/core` and `@dnd-kit/sortable` for drag and drop
 - Vitest, Testing Library, and jsdom for unit/component tests
-- Playwright for browser tests
 
 ## Structure
 
@@ -23,10 +22,9 @@ This directory contains the existing Next.js Kanban Studio frontend. It is curre
 - `src/components/KanbanCard.tsx` renders a sortable card with a remove action.
 - `src/components/KanbanCardPreview.tsx` renders the drag overlay.
 - `src/components/NewCardForm.tsx` owns the add-card form state and validation.
-- `src/lib/kanban.ts` defines `Card`, `Column`, and `BoardData`, provides `initialData`, and contains the pure `moveCard` and `createId` helpers.
+- `src/lib/kanban.ts` defines `Card`, `Column`, and `BoardData`, provides `initialData`, and contains the pure `moveCard`, `createId`, and `visibleColumns`/`isHiddenColumn` helpers.
 - `src/lib/api.ts` contains the same-origin API client for authenticated board reads and mutations.
 - `src/**/*.test.{ts,tsx}` contains Vitest tests; `src/test/setup.ts` configures Testing Library matchers.
-- `tests/kanban.spec.ts` contains Playwright browser tests.
 
 ## Commands
 
@@ -36,12 +34,10 @@ Run these from `frontend/`:
 - `npm run build` creates a production build.
 - `npm run lint` runs ESLint.
 - `npm run test:unit` runs Vitest tests.
-- `npm run test:e2e` runs Playwright tests and starts the configured dev server on port `3000` when needed.
-- `npm run test:all` runs unit and browser tests.
 
 ## Current behavior
 
-- `/` displays the sign-in form until the MVP credentials are accepted, then displays the five-column Kanban board.
+- `/` displays the sign-in form until the MVP credentials are accepted, then displays the Kanban board. The board data carries five columns; the `Review` column is hidden from the UI (see `visibleColumns` in `src/lib/kanban.ts`), so four are shown.
 - The board starts from `initialData` on every page load and is not persisted.
 - Columns can be renamed in place.
 - Cards can be added and removed.
@@ -55,4 +51,4 @@ Run these from `frontend/`:
 - Preserve the current behavior and visual design unless a plan step requires a change.
 - Keep pure board transformations in `src/lib/kanban.ts` and keep network concerns out of presentational components.
 - Prefer integration tests for frontend/backend and user workflows; retain focused unit tests for pure helpers.
-- The frontend development server and existing Playwright configuration use port `3000`. The Dockerized FastAPI application will use port `8000`.
+- The frontend development server uses port `3000`. The Dockerized FastAPI application will use port `8000`.
