@@ -38,7 +38,7 @@ export const AppShell = ({ onLogout, remote = false }: AppShellProps) => {
             className='admin-banner-logo-link'
             aria-label='Home'
           >
-            <img src={logo} alt='Kanban PM logo' className='logo' />
+            <img src={logo} alt='Mission Board logo' className='logo' />
           </button>
           <div className='admin-banner-nav'>
             <button

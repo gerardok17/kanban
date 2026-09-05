@@ -13,8 +13,8 @@ const bodyFont = Manrope({
 });
 
 export const metadata: Metadata = {
-  title: "Kanban Studio",
-  description: "A focused, single-board kanban workspace.",
+  title: "Mission Board",
+  description: "Mission board is a simple kanban board for managing tasks and projects.",
 };
 
 export default function RootLayout({
