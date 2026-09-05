@@ -85,3 +85,22 @@ export const createBoard = (title: string) =>
 
 export const deleteBoard = (boardId: string) =>
   request<BoardSummary[]>(`/api/boards/${boardId}`, { method: "DELETE" });
+
+export type User = {
+  id: string;
+  username: string;
+  created_at: string | null;
+};
+
+export const listUsers = (signal?: AbortSignal) =>
+  request<User[]>("/api/users", { signal });
+
+// Create and delete return the refreshed user list.
+export const createUser = (username: string, password: string) =>
+  request<User[]>("/api/users", {
+    method: "POST",
+    body: JSON.stringify({ username, password }),
+  });
+
+export const deleteUser = (userId: string) =>
+  request<User[]>(`/api/users/${userId}`, { method: "DELETE" });
