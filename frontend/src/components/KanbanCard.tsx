@@ -9,10 +9,20 @@ type KanbanCardProps = {
   card: Card
   onEdit: (cardId: string, title: string, details: string) => void
   onDelete: (cardId: string) => void
+  // Only cards in the Done column can be completed (archived off the board).
+  canComplete?: boolean
+  onComplete?: (cardId: string) => void
 }
 
-export const KanbanCard = ({ card, onEdit, onDelete }: KanbanCardProps) => {
+export const KanbanCard = ({
+  card,
+  onEdit,
+  onDelete,
+  canComplete = false,
+  onComplete,
+}: KanbanCardProps) => {
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [completeOpen, setCompleteOpen] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
   const [draft, setDraft] = useState({ title: card.title, details: card.details })
   const {
@@ -110,7 +120,33 @@ export const KanbanCard = ({ card, onEdit, onDelete }: KanbanCardProps) => {
               {card.details}
             </p>
           </div>
-          <div className='mt-3 flex items-center justify-end gap-1 border-t border-black/5 pt-3'>
+          <div className='mt-3 flex items-center justify-between gap-1 border-t border-black/5 pt-3'>
+            <div className='flex items-center gap-1'>
+              {canComplete && onComplete ? (
+                <button
+                  type='button'
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={() => setCompleteOpen(true)}
+                  className='inline-flex items-center gap-1 rounded-full border border-black/10 px-2.5 py-1.5 text-xs font-semibold text-[var(--accent-green)] transition hover:border-[var(--accent-green)] hover:bg-[var(--accent-green)]/10'
+                  aria-label={`Complete ${card.title}`}
+                >
+                  <svg
+                    viewBox='0 0 24 24'
+                    fill='none'
+                    stroke='currentColor'
+                    strokeWidth='2.5'
+                    strokeLinecap='round'
+                    strokeLinejoin='round'
+                    className='h-3.5 w-3.5'
+                    aria-hidden='true'
+                  >
+                    <path d='M20 6 9 17l-5-5' />
+                  </svg>
+                  Complete
+                </button>
+              ) : null}
+            </div>
+            <div className='flex items-center gap-1'>
             <button
               type='button'
               onPointerDown={(event) => event.stopPropagation()}
@@ -156,6 +192,7 @@ export const KanbanCard = ({ card, onEdit, onDelete }: KanbanCardProps) => {
                 <path d='M14 11v6' />
               </svg>
             </button>
+            </div>
           </div>
         </>
       )}
@@ -170,6 +207,19 @@ export const KanbanCard = ({ card, onEdit, onDelete }: KanbanCardProps) => {
           setConfirmOpen(false)
         }}
         onCancel={() => setConfirmOpen(false)}
+      />
+      <ConfirmDialog
+        open={completeOpen}
+        title='Complete card'
+        message={`"${card.title}" will be archived and removed from the board.`}
+        confirmLabel='Complete'
+        cancelLabel='Cancel'
+        confirmTone='positive'
+        onConfirm={() => {
+          onComplete?.(card.id)
+          setCompleteOpen(false)
+        }}
+        onCancel={() => setCompleteOpen(false)}
       />
     </article>
   )

@@ -12,6 +12,9 @@ type KanbanColumnProps = {
   onAddCard: (columnId: string, title: string, details: string) => void;
   onEditCard: (cardId: string, title: string, details: string) => void;
   onDeleteCard: (columnId: string, cardId: string) => void;
+  // When true, this is the Done column and its cards can be completed.
+  canComplete?: boolean;
+  onCompleteCard?: (cardId: string) => void;
 };
 
 export const KanbanColumn = ({
@@ -21,6 +24,8 @@ export const KanbanColumn = ({
   onAddCard,
   onEditCard,
   onDeleteCard,
+  canComplete = false,
+  onCompleteCard,
 }: KanbanColumnProps) => {
   const { setNodeRef, isOver } = useDroppable({ id: column.id });
 
@@ -72,6 +77,8 @@ export const KanbanColumn = ({
               card={card}
               onEdit={onEditCard}
               onDelete={(cardId) => onDeleteCard(column.id, cardId)}
+              canComplete={canComplete}
+              onComplete={onCompleteCard}
             />
           ))}
         </SortableContext>

@@ -85,7 +85,11 @@
         "title": { "type": "string", "minLength": 1 },
         "details": { "type": "string" },
         "createdAt": { "$ref": "#/$defs/timestamp" },
-        "updatedAt": { "$ref": "#/$defs/timestamp" }
+        "updatedAt": { "$ref": "#/$defs/timestamp" },
+        "completedAt": {
+          "oneOf": [{ "$ref": "#/$defs/timestamp" }, { "type": "null" }],
+          "description": "When the card was completed (archived off the board); null while active."
+        }
       }
     }
   }
