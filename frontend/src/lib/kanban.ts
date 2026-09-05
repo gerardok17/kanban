@@ -85,6 +85,12 @@ export const isHiddenColumn = (columnId: string) =>
 export const visibleColumns = (columns: Column[]) =>
   columns.filter((column) => !isHiddenColumn(column.id));
 
+// The "Done" column, matched by id suffix (like isHiddenColumn) so it keeps
+// working if the column title is renamed. New boards seed `<boardId>-col-done`;
+// the original starter board uses the bare `col-done`.
+export const isDoneColumn = (columnId: string) =>
+  columnId === "col-done" || columnId.endsWith("-col-done");
+
 const isColumnId = (columns: Column[], id: string) =>
   columns.some((column) => column.id === id);
 

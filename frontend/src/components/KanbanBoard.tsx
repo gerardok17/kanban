@@ -16,6 +16,7 @@ import { KanbanColumn } from '@/components/KanbanColumn'
 import { KanbanCardPreview } from '@/components/KanbanCardPreview'
 import {
   addCard,
+  completeCard,
   deleteCard,
   editCard,
   getBoard,
@@ -26,6 +27,7 @@ import {
 import {
   createId,
   initialData,
+  isDoneColumn,
   moveCard,
   visibleColumns,
   type BoardData,
@@ -205,6 +207,15 @@ export const KanbanBoard = ({
     })
   }
 
+  // Completing archives the card off the board; remote mode only (see product
+  // decision), so there is no in-memory demo branch.
+  const handleCompleteCard = (cardId: string) => {
+    if (!remote) {
+      return
+    }
+    void applyRemoteChange(() => completeCard(cardId))
+  }
+
   const activeCard = activeCardId ? cardsById[activeCardId] : null
 
   if (isLoading) {
@@ -240,6 +251,8 @@ export const KanbanBoard = ({
               onAddCard={handleAddCard}
               onEditCard={handleEditCard}
               onDeleteCard={handleDeleteCard}
+              canComplete={remote && isDoneColumn(column.id)}
+              onCompleteCard={handleCompleteCard}
             />
           ))}
         </section>

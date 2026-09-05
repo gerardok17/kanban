@@ -246,5 +246,18 @@ def move_board_card(
     return database.get_board(username, board_id)
 
 
+@app.post("/api/board/cards/{card_id}/complete")
+def complete_board_card(
+    card_id: str,
+    session: str | None = Cookie(default=None),
+) -> dict:
+    username = require_session(session)
+    try:
+        board_id = database.complete_card(username, card_id)
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    return database.get_board(username, board_id)
+
+
 frontend_directory = Path(__file__).resolve().parents[2] / "frontend"
 app.mount("/", StaticFiles(directory=frontend_directory, html=True), name="frontend")

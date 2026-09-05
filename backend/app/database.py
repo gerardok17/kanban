@@ -94,6 +94,12 @@ SCHEMA_STATEMENTS = [
         UNIQUE KEY uq_cardpos_col_card (column_id, card_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     """,
+    # Migration v2: a completed card is archived off the board. `completed_at`
+    # NULL means active; a timestamp means completed (and its card_positions row
+    # is removed so it no longer appears in any column).
+    """
+    ALTER TABLE cards ADD COLUMN IF NOT EXISTS completed_at DATETIME NULL
+    """,
 ]
 
 
@@ -151,6 +157,11 @@ def initialize_database() -> None:
         _exec(
             connection,
             "INSERT IGNORE INTO schema_migrations(version, applied_at) VALUES (1, %s)",
+            (utc_now(),),
+        )
+        _exec(
+            connection,
+            "INSERT IGNORE INTO schema_migrations(version, applied_at) VALUES (2, %s)",
             (utc_now(),),
         )
         existing = _one(
@@ -379,7 +390,16 @@ def _read_board(connection: Connection, board_id: str) -> dict[str, Any]:
     )
     cards = _all(
         connection,
-        "SELECT id, title, details FROM cards WHERE board_id = %s",
+        "SELECT id, title, details FROM cards WHERE board_id = %s AND completed_at IS NULL",
+        (board_id,),
+    )
+    completed = _all(
+        connection,
+        """
+        SELECT id, title, completed_at FROM cards
+        WHERE board_id = %s AND completed_at IS NOT NULL
+        ORDER BY completed_at DESC
+        """,
         (board_id,),
     )
     positions = _all(
@@ -411,6 +431,16 @@ def _read_board(connection: Connection, board_id: str) -> dict[str, Any]:
             }
             for card in cards
         },
+        "completed": [
+            {
+                "id": card["id"],
+                "title": card["title"],
+                "completedAt": card["completed_at"].isoformat()
+                if card["completed_at"]
+                else None,
+            }
+            for card in completed
+        ],
     }
 
 
@@ -497,6 +527,34 @@ def delete_card(username: str, card_id: str) -> str:
             (utc_now(), board_id),
         )
         normalize_positions(connection, board_id)
+    return board_id
+
+
+def complete_card(username: str, card_id: str) -> str:
+    """Archive a card off the board: stamp completed_at and drop its position so
+    it leaves every column. One-way; the card survives only in dashboard stats."""
+    with connect() as connection:
+        board_id = _board_id_for_card(connection, username, card_id)
+        now = utc_now()
+        _exec(
+            connection,
+            """
+            UPDATE cards SET completed_at = %s, updated_at = %s
+            WHERE id = %s AND board_id = %s AND completed_at IS NULL
+            """,
+            (now, now, card_id, board_id),
+        )
+        _exec(
+            connection,
+            "DELETE FROM card_positions WHERE card_id = %s AND board_id = %s",
+            (card_id, board_id),
+        )
+        normalize_positions(connection, board_id)
+        _exec(
+            connection,
+            "UPDATE boards SET updated_at = %s WHERE id = %s",
+            (now, board_id),
+        )
     return board_id
 
 

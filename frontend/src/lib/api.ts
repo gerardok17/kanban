@@ -51,14 +51,26 @@ export const moveCard = (cardId: string, columnId: string, position: number) =>
     body: JSON.stringify({ columnId, position }),
   });
 
+export const completeCard = (cardId: string) =>
+  request<BoardData>(`/api/board/cards/${cardId}/complete`, { method: "POST" });
+
 export type BoardSummary = {
   id: string;
   title: string;
   position: number;
 };
 
-// The API returns the board with its id/title, which BoardData itself omits.
-export type Board = BoardData & { id: string; title: string };
+// A card archived off the board via the "complete" action. Surfaced in the
+// board payload for the dashboard; the board view itself ignores it.
+export type CompletedCard = { id: string; title: string; completedAt: string | null };
+
+// The API returns the board with its id/title, which BoardData itself omits,
+// plus the list of completed (archived) cards.
+export type Board = BoardData & {
+  id: string;
+  title: string;
+  completed: CompletedCard[];
+};
 
 export const listBoards = () => request<BoardSummary[]>("/api/boards");
 

@@ -9,6 +9,9 @@ type ConfirmDialogProps = {
   message?: string
   confirmLabel?: string
   cancelLabel?: string
+  // Confirm button color: 'danger' (red, e.g. delete) or 'positive' (green,
+  // e.g. complete). Defaults to danger.
+  confirmTone?: 'danger' | 'positive'
   onConfirm: () => void
   onCancel: () => void
 }
@@ -19,6 +22,7 @@ export const ConfirmDialog = ({
   message,
   confirmLabel = 'Delete',
   cancelLabel = 'Cancel',
+  confirmTone = 'danger',
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) => {
@@ -67,7 +71,11 @@ export const ConfirmDialog = ({
           <button
             type='button'
             onClick={onConfirm}
-            className='rounded-full bg-[var(--accent-red)] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90'
+            className={`rounded-full px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 ${
+              confirmTone === 'positive'
+                ? 'bg-[var(--accent-green)]'
+                : 'bg-[var(--accent-red)]'
+            }`}
           >
             {confirmLabel}
           </button>

@@ -14,15 +14,19 @@ type BoardStats = {
   title: string
   total: number
   byStatus: { title: string; count: number }[]
+  completedCount: number
+  completedCards: { id: string; title: string }[]
 }
 
 // A card's "status/category" is the column it sits in. Per-board totals and
 // per-status counts are derived from each board's full data. listBoards() only
 // returns id/title/position, so the dashboard fetches every board once and
 // aggregates client-side; a dedicated /api/stats endpoint would be the upgrade
-// if the board count ever grew large.
+// if the board count ever grew large. Completed cards are archived off the
+// board and arrive in board.completed, separate from the column counts.
 const toStats = (board: Board): BoardStats => {
   const columns = visibleColumns(board.columns)
+  const completed = board.completed ?? []
   return {
     id: board.id,
     title: board.title,
@@ -31,6 +35,8 @@ const toStats = (board: Board): BoardStats => {
       title: column.title,
       count: column.cardIds.length,
     })),
+    completedCount: completed.length,
+    completedCards: completed.map((card) => ({ id: card.id, title: card.title })),
   }
 }
 
@@ -49,7 +55,9 @@ export const DashboardView = ({ onLogout, remote = false }: DashboardViewProps) 
   // Demo mode has one static in-memory board, so seed it as initial state
   // rather than in an effect; the effect only runs for the remote fetch.
   const [stats, setStats] = useState<BoardStats[] | null>(() =>
-    remote ? null : [toStats({ id: 'demo', title: 'Demo Board', ...initialData })],
+    remote
+      ? null
+      : [toStats({ id: 'demo', title: 'Demo Board', completed: [], ...initialData })],
   )
   const [error, setError] = useState('')
 
@@ -84,6 +92,8 @@ export const DashboardView = ({ onLogout, remote = false }: DashboardViewProps) 
 
   const totalBoards = stats?.length ?? 0
   const totalCards = stats?.reduce((sum, board) => sum + board.total, 0) ?? 0
+  const totalCompleted =
+    stats?.reduce((sum, board) => sum + board.completedCount, 0) ?? 0
 
   // Aggregate card counts by status title across every board.
   const globalByStatus = new Map<string, number>()
@@ -132,6 +142,15 @@ export const DashboardView = ({ onLogout, remote = false }: DashboardViewProps) 
                     </span>
                   </div>
                 ))}
+                <div className='flex items-center gap-3 rounded-full border border-[var(--stroke)] bg-[var(--card-white)] px-4 py-2 shadow-[var(--shadow)]'>
+                  <span className='h-2 w-2 rounded-full bg-[var(--accent-green)]' />
+                  <span className='text-sm font-medium text-[var(--navy-dark)]'>
+                    Completed
+                  </span>
+                  <span className='text-sm font-semibold text-[var(--accent-green)]'>
+                    {totalCompleted}
+                  </span>
+                </div>
               </div>
             </section>
           ) : null}
@@ -172,6 +191,28 @@ export const DashboardView = ({ onLogout, remote = false }: DashboardViewProps) 
                         </li>
                       ))}
                     </ul>
+                    <div className='mt-3 border-t border-black/5 pt-3'>
+                      <div className='flex items-center justify-between text-sm'>
+                        <span className='font-semibold text-[var(--accent-green)]'>
+                          Completed
+                        </span>
+                        <span className='font-semibold text-[var(--accent-green)]'>
+                          {board.completedCount}
+                        </span>
+                      </div>
+                      {board.completedCards.length > 0 ? (
+                        <ul className='mt-2 flex flex-col gap-1'>
+                          {board.completedCards.map((card) => (
+                            <li
+                              key={card.id}
+                              className='truncate text-xs text-[var(--gray-text)]'
+                            >
+                              {card.title}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </div>
                   </article>
                 ))}
               </div>
