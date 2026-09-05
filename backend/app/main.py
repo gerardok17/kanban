@@ -3,7 +3,6 @@ from pathlib import Path
 from secrets import token_urlsafe
 
 from fastapi import Cookie, FastAPI, HTTPException, Response, status
-from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from fastapi.staticfiles import StaticFiles
 from . import database
@@ -20,15 +19,6 @@ async def lifespan(_app: FastAPI):
 app = FastAPI(title="Project Management MVP", lifespan=lifespan)
 # In-memory session tokens mapped to their username (cleared on restart).
 sessions: dict[str, str] = {}
-
-# Enable CORS for development; allows frontend on localhost:3000 to call backend on remote host
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:8000"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 
 class LoginRequest(BaseModel):
@@ -78,7 +68,7 @@ def login(payload: LoginRequest, response: Response) -> dict[str, str]:
 
     session = token_urlsafe(32)
     sessions[session] = username
-    response.set_cookie("session", session, httponly=True, samesite="none", max_age=86400)
+    response.set_cookie("session", session, httponly=True, samesite="lax", max_age=86400)
     return {"username": username}
 
 
