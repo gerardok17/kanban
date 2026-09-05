@@ -38,26 +38,27 @@ export const AuthGate = () => {
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setError('')
-    if (
-      username !== credentials.username ||
-      password !== credentials.password
-    ) {
-      setError('Invalid username or password.')
-      return
-    }
-
     setIsSubmitting(true)
     try {
       if (usesBackendSession()) {
+        // The backend authenticates against the users table (bcrypt) and is the
+        // source of truth, so any valid user can sign in. No hardcoded check.
         const response = await fetch('/api/auth/login', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ username, password }),
         })
         if (!response.ok) {
-          setError('Unable to sign in right now.')
+          setError('Invalid username or password.')
           return
         }
+      } else if (
+        // Demo mode has no backend, so fall back to the built-in demo credentials.
+        username !== credentials.username ||
+        password !== credentials.password
+      ) {
+        setError('Invalid username or password.')
+        return
       }
       window.localStorage.setItem('kanban-auth', 'signed-in')
       window.dispatchEvent(new Event(authEvent))
