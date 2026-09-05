@@ -54,6 +54,11 @@ class BoardRenameRequest(BaseModel):
     title: str
 
 
+class UserCreateRequest(BaseModel):
+    username: str
+    password: str
+
+
 def require_session(session: str | None) -> str:
     if session is None or session not in sessions:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
@@ -97,6 +102,37 @@ def read_health() -> dict[str, str]:
 @app.get("/api/users")
 def list_users(session: str | None = Cookie(default=None)) -> list[dict]:
     require_session(session)
+    return database.list_users()
+
+
+@app.post("/api/users", status_code=201)
+def create_user(
+    payload: UserCreateRequest,
+    session: str | None = Cookie(default=None),
+) -> list[dict]:
+    require_session(session)
+    username = payload.username.strip()
+    password = payload.password
+    if not username or not password:
+        raise HTTPException(status_code=422, detail="Username and password are required")
+    user_id = f"user-{token_urlsafe(12)}"
+    try:
+        database.create_user(user_id, username, password)
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    return database.list_users()
+
+
+@app.delete("/api/users/{user_id}")
+def delete_user(
+    user_id: str,
+    session: str | None = Cookie(default=None),
+) -> list[dict]:
+    require_session(session)
+    try:
+        database.delete_user(user_id)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
     return database.list_users()
 
 

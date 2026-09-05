@@ -203,10 +203,13 @@ def authenticate(username: str, password: str) -> str | None:
 
 
 def list_users() -> list[dict[str, Any]]:
+    # Ordered by creation so the row index is stable and the seed user is always
+    # first (row 1) — the UI shows the index instead of the DB id, and the first
+    # user is protected from deletion.
     with connect() as connection:
         users = _all(
             connection,
-            "SELECT id, username, created_at FROM users ORDER BY username",
+            "SELECT id, username, created_at FROM users ORDER BY created_at, username",
         )
     return [
         {
@@ -216,6 +219,40 @@ def list_users() -> list[dict[str, Any]]:
         }
         for user in users
     ]
+
+
+def _first_user_id(connection: Connection) -> str | None:
+    """The oldest user — protected from deletion (matches the UI's first row)."""
+    row = _one(
+        connection,
+        "SELECT id FROM users ORDER BY created_at, username LIMIT 1",
+    )
+    return row["id"] if row else None
+
+
+def create_user(user_id: str, username: str, password: str) -> None:
+    with connect() as connection:
+        existing = _one(
+            connection, "SELECT id FROM users WHERE username = %s", (username,)
+        )
+        if existing is not None:
+            raise ValueError("Username already exists")
+        _exec(
+            connection,
+            "INSERT INTO users(id, username, password_hash, created_at) VALUES (%s, %s, %s, %s)",
+            (user_id, username, hash_password(password), utc_now()),
+        )
+
+
+def delete_user(user_id: str) -> None:
+    with connect() as connection:
+        target = _one(connection, "SELECT id FROM users WHERE id = %s", (user_id,))
+        if target is None:
+            raise ValueError("User not found")
+        if user_id == _first_user_id(connection):
+            raise ValueError("The first user cannot be deleted")
+        # Boards (and their columns/cards) cascade-delete via the FK.
+        _exec(connection, "DELETE FROM users WHERE id = %s", (user_id,))
 
 
 # --- Ownership helpers -----------------------------------------------------
