@@ -78,7 +78,7 @@ def login(payload: LoginRequest, response: Response) -> dict[str, str]:
 
     session = token_urlsafe(32)
     sessions[session] = username
-    response.set_cookie("session", session, httponly=True, samesite="lax", max_age=86400)
+    response.set_cookie("session", session, httponly=True, samesite="none", max_age=86400)
     return {"username": username}
 
 
