@@ -30,8 +30,17 @@ export const AuthGate = () => {
   const [error, setError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const usesBackendSession = () =>
-    window.location.port === '8000' || window.location.port === ''
+  const getApiBaseUrl = (): string => {
+    if (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_API_BASE_URL) {
+      return process.env.NEXT_PUBLIC_API_BASE_URL
+    }
+    return ''
+  }
+
+  const usesBackendSession = () => {
+    const hasRemoteApi = getApiBaseUrl() !== ''
+    return hasRemoteApi || window.location.port === '8000' || window.location.port === ''
+  }
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -47,8 +56,11 @@ export const AuthGate = () => {
     setIsSubmitting(true)
     try {
       if (usesBackendSession()) {
-        const response = await fetch('/api/auth/login', {
+        const baseUrl = getApiBaseUrl()
+        const url = baseUrl ? `${baseUrl}/api/auth/login` : '/api/auth/login'
+        const response = await fetch(url, {
           method: 'POST',
+          credentials: 'include',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ username, password }),
         })
@@ -69,7 +81,9 @@ export const AuthGate = () => {
   const handleLogout = async () => {
     if (usesBackendSession()) {
       try {
-        await fetch('/api/auth/logout', { method: 'POST' })
+        const baseUrl = getApiBaseUrl()
+        const url = baseUrl ? `${baseUrl}/api/auth/logout` : '/api/auth/logout'
+        await fetch(url, { method: 'POST', credentials: 'include' })
       } catch {
         // Sign out locally regardless; the backend session cookie expires on its own.
       }

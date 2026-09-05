@@ -2,9 +2,21 @@ import type { BoardData } from "@/lib/kanban";
 
 type ApiError = Error & { status?: number };
 
+const getApiBaseUrl = (): string => {
+  // Next.js public env var: allows overriding API base URL for remote backend
+  if (typeof window !== "undefined" && process.env.NEXT_PUBLIC_API_BASE_URL) {
+    return process.env.NEXT_PUBLIC_API_BASE_URL;
+  }
+  return "";
+};
+
 const request = async <T>(path: string, options?: RequestInit): Promise<T> => {
-  const response = await fetch(path, {
+  const baseUrl = getApiBaseUrl();
+  const url = baseUrl ? `${baseUrl}${path}` : path;
+
+  const response = await fetch(url, {
     ...options,
+    credentials: "include",
     headers: {
       "content-type": "application/json",
       ...options?.headers,
