@@ -26,6 +26,8 @@
   --color-background: var(--surface);
   --color-foreground: var(--navy-dark);
   --font-sans: var(--font-body);
+  /* Softer default backdrop blur (Tailwind's `backdrop-blur` utility); 8px -> 3px */
+  --blur: 3px;
 }
 
 * {
@@ -61,7 +63,7 @@ body {
 }
 
 .admin-banner-logo-link .logo {
-  width: 18rem;
+  width: 23rem;
 }
 
 /* Responsive */
