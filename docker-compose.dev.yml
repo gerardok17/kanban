@@ -1,0 +1,51 @@
+# Local, isolated DEV stack for Mission Board — NOT production.
+# Runs the backend API against a throwaway MariaDB (kanbanpmdb_dev) so auth work
+# never touches the shared production database on hyperion.
+#
+# Usage:
+#   docker compose -f docker-compose.dev.yml up
+# Then run the frontend separately (talks to this backend via the dev proxy):
+#   cd frontend && NEXT_PUBLIC_USE_REMOTE_BACKEND=1 KANBAN_BACKEND_URL=http://localhost:8000 npm run dev
+#
+# Reset the dev database from scratch:
+#   docker compose -f docker-compose.dev.yml down -v
+services:
+  db:
+    image: mariadb:11
+    environment:
+      MARIADB_ROOT_PASSWORD: devroot
+      MARIADB_DATABASE: kanbanpmdb_dev
+    ports:
+      - "127.0.0.1:3307:3306"
+    volumes:
+      - kanban_dev_db:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  backend:
+    image: python:3.12-slim
+    working_dir: /app/backend
+    # mkdir: the prod image ships a static frontend at /app/frontend; in dev the
+    # frontend runs via `npm run dev`, so create an empty dir to satisfy the mount.
+    command: sh -c "mkdir -p /app/frontend && pip install --root-user-action=ignore --quiet ./ && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    environment:
+      MYSQL_HOST: db
+      MYSQL_PORT: "3306"
+      MYSQL_USER: root
+      MYSQL_PASSWORD: devroot
+      MYSQL_DATABASE: kanbanpmdb_dev
+    env_file:
+      - backend/.env.dev
+    volumes:
+      - ./backend:/app/backend
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  kanban_dev_db:

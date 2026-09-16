@@ -89,17 +89,19 @@ export const deleteBoard = (boardId: string) =>
 export type User = {
   id: string;
   username: string;
+  email: string | null;
   created_at: string | null;
 };
 
 export const listUsers = (signal?: AbortSignal) =>
   request<User[]>("/api/users", { signal });
 
-// Create and delete return the refreshed user list.
-export const createUser = (username: string, password: string) =>
+// Create and delete return the refreshed user list. Users are added by email
+// (the Google sign-in allowlist); no password is stored.
+export const createUser = (email: string) =>
   request<User[]>("/api/users", {
     method: "POST",
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify({ email }),
   });
 
 export const deleteUser = (userId: string) =>

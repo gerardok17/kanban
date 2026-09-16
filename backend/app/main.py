@@ -1,10 +1,15 @@
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 from secrets import token_urlsafe
 
-from fastapi import Cookie, FastAPI, HTTPException, Response, status
-from pydantic import BaseModel
+from authlib.integrations.starlette_client import OAuth
+from fastapi import Cookie, FastAPI, HTTPException, Request, Response, status
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+from starlette.middleware.sessions import SessionMiddleware
+
 from . import database
 
 
@@ -19,6 +24,34 @@ async def lifespan(_app: FastAPI):
 app = FastAPI(title="Project Management MVP", lifespan=lifespan)
 # In-memory session tokens mapped to their username (cleared on restart).
 sessions: dict[str, str] = {}
+
+# --- Google OIDC ("Sign in with Google") -----------------------------------
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
+GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI", "")
+# Signs the short-lived cookie that carries the OAuth state/nonce between the
+# login redirect and the callback. Set a real random value in production.
+SESSION_SECRET = os.getenv("SESSION_SECRET", "dev-insecure-session-secret")
+
+# Distinct cookie name: the app's own auth cookie is "session"; this one only
+# carries the transient OAuth state/nonce, so they must not collide.
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=SESSION_SECRET,
+    session_cookie="oauth_state",
+    same_site="lax",
+)
+
+oauth = OAuth()
+google_enabled = bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET)
+if google_enabled:
+    oauth.register(
+        name="google",
+        client_id=GOOGLE_CLIENT_ID,
+        client_secret=GOOGLE_CLIENT_SECRET,
+        server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
+        client_kwargs={"scope": "openid email profile"},
+    )
 
 
 class LoginRequest(BaseModel):
@@ -55,8 +88,7 @@ class BoardRenameRequest(BaseModel):
 
 
 class UserCreateRequest(BaseModel):
-    username: str
-    password: str
+    email: str
 
 
 def require_session(session: str | None) -> str:
@@ -89,6 +121,40 @@ def logout(response: Response, session: str | None = Cookie(default=None)) -> di
     response.delete_cookie("session")
     return {"status": "signed_out"}
 
+
+@app.get("/api/auth/google/login")
+async def google_login(request: Request):
+    if not google_enabled:
+        raise HTTPException(status_code=503, detail="Google sign-in is not configured")
+    redirect_uri = GOOGLE_REDIRECT_URI or str(request.url_for("google_callback"))
+    return await oauth.google.authorize_redirect(request, redirect_uri)
+
+
+@app.get("/api/auth/google/callback", name="google_callback")
+async def google_callback(request: Request):
+    if not google_enabled:
+        raise HTTPException(status_code=503, detail="Google sign-in is not configured")
+    # A rejected/failed exchange must never 500 the user onto a blank page; send
+    # them back to the login screen with an error the UI can explain.
+    try:
+        token = await oauth.google.authorize_access_token(request)
+    except Exception:
+        return RedirectResponse(url="/?auth_error=google", status_code=status.HTTP_303_SEE_OTHER)
+    userinfo = token.get("userinfo") or {}
+    email = (userinfo.get("email") or "").strip()
+    if not email or not userinfo.get("email_verified"):
+        return RedirectResponse(url="/?auth_error=google", status_code=status.HTTP_303_SEE_OTHER)
+    # Allowlist gate: only emails added under Users may sign in.
+    username = database.user_for_email(email)
+    if username is None:
+        return RedirectResponse(url="/?auth_error=not_allowed", status_code=status.HTTP_303_SEE_OTHER)
+    session_token = token_urlsafe(32)
+    sessions[session_token] = username
+    response = RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+    response.set_cookie("session", session_token, httponly=True, samesite="lax", max_age=86400)
+    return response
+
+
 @app.get("/api/hello")
 def read_hello() -> dict[str, str]:
     return {"message": "Hello, world!"}
@@ -111,13 +177,12 @@ def create_user(
     session: str | None = Cookie(default=None),
 ) -> list[dict]:
     require_session(session)
-    username = payload.username.strip()
-    password = payload.password
-    if not username or not password:
-        raise HTTPException(status_code=422, detail="Username and password are required")
+    email = payload.email.strip().lower()
+    if not email or "@" not in email:
+        raise HTTPException(status_code=422, detail="A valid email is required")
     user_id = f"user-{token_urlsafe(12)}"
     try:
-        database.create_user(user_id, username, password)
+        database.create_allowlisted_user(user_id, email)
     except ValueError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
     return database.list_users()

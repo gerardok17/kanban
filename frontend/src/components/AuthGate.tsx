@@ -1,7 +1,8 @@
 'use client'
 
-import { FormEvent, useState, useSyncExternalStore } from 'react'
+import { FormEvent, useEffect, useState, useSyncExternalStore } from 'react'
 import { AppShell } from '@/components/AppShell'
+import { getSession } from '@/lib/api'
 
 const credentials = { username: 'gerardok17', password: 'gerardok17' }
 const authEvent = 'kanban-auth-change'
@@ -27,13 +28,46 @@ export const AuthGate = () => {
   )
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const usesBackendSession = () =>
     process.env.NEXT_PUBLIC_USE_REMOTE_BACKEND === '1' ||
     window.location.port === '8000' ||
     window.location.port === ''
+
+  // Derived once at first client render (SSR-safe), so no effect-driven setState.
+  const [remoteMode] = useState(
+    () => typeof window !== 'undefined' && usesBackendSession(),
+  )
+  const [error, setError] = useState(() => {
+    if (typeof window === 'undefined') return ''
+    const authError = new URLSearchParams(window.location.search).get('auth_error')
+    if (authError === 'not_allowed')
+      return 'That Google account is not allowed. Ask an admin to add it under Users.'
+    if (authError === 'google') return 'Google sign-in failed. Please try again.'
+    return ''
+  })
+
+  useEffect(() => {
+    // Clean the one-time auth_error param out of the URL after reading it above.
+    const params = new URLSearchParams(window.location.search)
+    if (params.has('auth_error')) {
+      params.delete('auth_error')
+      const query = params.toString()
+      window.history.replaceState(null, '', query ? `?${query}` : window.location.pathname)
+    }
+    if (!remoteMode) {
+      return
+    }
+    // In remote mode the backend session cookie is the source of truth: if it is
+    // valid (e.g. we just returned from Google), reflect signed-in state locally.
+    getSession()
+      .then(() => {
+        window.localStorage.setItem('kanban-auth', 'signed-in')
+        window.dispatchEvent(new Event(authEvent))
+      })
+      .catch(() => {})
+  }, [remoteMode])
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -125,6 +159,21 @@ export const AuthGate = () => {
             {isSubmitting ? 'Signing in...' : 'Sign in'}
           </button>
         </form>
+
+        {remoteMode ? (
+          <>
+            <div className='my-4 text-center text-sm text-[var(--gray-text)]'>or</div>
+            <button
+              type='button'
+              className='login-button'
+              onClick={() => {
+                window.location.href = '/api/auth/google/login'
+              }}
+            >
+              Sign in with Google
+            </button>
+          </>
+        ) : null}
       </div>
     </div>
   )

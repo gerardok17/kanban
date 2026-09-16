@@ -1,6 +1,7 @@
 import os
 from contextlib import contextmanager
 from datetime import datetime, timezone
+from secrets import token_urlsafe
 from typing import Any, Iterator
 
 import bcrypt
@@ -22,6 +23,9 @@ DB_CONFIG: dict[str, Any] = {
 
 SEED_USERNAME = "gerardok17"
 SEED_PASSWORD = "gerardok17"
+# Bootstrap allowlist email for the seed user, read from the environment so the
+# public repo never carries a personal address. Unset means no email is seeded.
+SEED_EMAIL = os.getenv("SEED_EMAIL", "").strip()
 
 # Default columns every new board starts with (renameable in the UI).
 DEFAULT_COLUMNS = [
@@ -100,6 +104,19 @@ SCHEMA_STATEMENTS = [
     """
     ALTER TABLE cards ADD COLUMN IF NOT EXISTS completed_at DATETIME NULL
     """,
+    # Migration v3: move toward "Sign in with Google" (OIDC). `email` is the
+    # allowlist key for Google login; `password_hash` becomes nullable so a
+    # future google-only user can exist without a local password. Additive and
+    # backward-compatible — the existing password login keeps working.
+    """
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS email VARCHAR(255) NULL
+    """,
+    """
+    ALTER TABLE users MODIFY password_hash VARCHAR(255) NULL
+    """,
+    """
+    ALTER TABLE users ADD UNIQUE INDEX IF NOT EXISTS uq_users_email (email)
+    """,
 ]
 
 
@@ -164,19 +181,32 @@ def initialize_database() -> None:
             "INSERT IGNORE INTO schema_migrations(version, applied_at) VALUES (2, %s)",
             (utc_now(),),
         )
+        _exec(
+            connection,
+            "INSERT IGNORE INTO schema_migrations(version, applied_at) VALUES (3, %s)",
+            (utc_now(),),
+        )
         existing = _one(
             connection, "SELECT id FROM users WHERE username = %s", (SEED_USERNAME,)
         )
         if existing is None:
             _seed_initial(connection)
+        # Backfill the seed user's allowlist email (covers already-seeded DBs such
+        # as production) without overwriting an email already set.
+        if SEED_EMAIL:
+            _exec(
+                connection,
+                "UPDATE users SET email = %s WHERE username = %s AND (email IS NULL OR email = '')",
+                (SEED_EMAIL, SEED_USERNAME),
+            )
 
 
 def _seed_initial(connection: Connection) -> None:
     now = utc_now()
     _exec(
         connection,
-        "INSERT INTO users(id, username, password_hash, created_at) VALUES (%s, %s, %s, %s)",
-        ("user-gerardok17", SEED_USERNAME, hash_password(SEED_PASSWORD), now),
+        "INSERT INTO users(id, username, password_hash, email, created_at) VALUES (%s, %s, %s, %s, %s)",
+        ("user-gerardok17", SEED_USERNAME, hash_password(SEED_PASSWORD), SEED_EMAIL or None, now),
     )
     _exec(
         connection,
@@ -197,7 +227,11 @@ def authenticate(username: str, password: str) -> str | None:
             "SELECT username, password_hash FROM users WHERE username = %s",
             (username,),
         )
-    if user is None or not verify_password(password, user["password_hash"]):
+    if (
+        user is None
+        or not user["password_hash"]
+        or not verify_password(password, user["password_hash"])
+    ):
         return None
     return user["username"]
 
@@ -209,12 +243,13 @@ def list_users() -> list[dict[str, Any]]:
     with connect() as connection:
         users = _all(
             connection,
-            "SELECT id, username, created_at FROM users ORDER BY created_at, username",
+            "SELECT id, username, email, created_at FROM users ORDER BY created_at, username",
         )
     return [
         {
             "id": user["id"],
             "username": user["username"],
+            "email": user["email"],
             "created_at": user["created_at"].isoformat() if user["created_at"] else None,
         }
         for user in users
@@ -242,6 +277,56 @@ def create_user(user_id: str, username: str, password: str) -> None:
             "INSERT INTO users(id, username, password_hash, created_at) VALUES (%s, %s, %s, %s)",
             (user_id, username, hash_password(password), utc_now()),
         )
+
+
+def user_for_email(email: str) -> str | None:
+    """Username for an allowlisted email (case-insensitive), or None if the email
+    is not on the allowlist. Backs the Google (OIDC) sign-in check."""
+    normalized = email.strip().lower()
+    if not normalized:
+        return None
+    with connect() as connection:
+        row = _one(
+            connection,
+            "SELECT username FROM users WHERE LOWER(email) = %s",
+            (normalized,),
+        )
+    return row["username"] if row else None
+
+
+def create_allowlisted_user(user_id: str, email: str) -> None:
+    """Add an email to the allowlist. The user signs in with Google only, so no
+    password is stored; username mirrors the email so board ownership works, and
+    a starter board is created just like the seed user."""
+    normalized = email.strip().lower()
+    with connect() as connection:
+        existing = _one(
+            connection,
+            "SELECT id FROM users WHERE LOWER(email) = %s OR username = %s",
+            (normalized, normalized),
+        )
+        if existing is not None:
+            raise ValueError("Email already exists")
+        now = utc_now()
+        _exec(
+            connection,
+            "INSERT INTO users(id, username, password_hash, email, created_at) VALUES (%s, %s, NULL, %s, %s)",
+            (user_id, normalized, normalized, now),
+        )
+        board_id = f"board-{token_urlsafe(12)}"
+        _exec(
+            connection,
+            "INSERT INTO boards(id, user_id, title, position, created_at, updated_at) VALUES (%s, %s, %s, %s, %s, %s)",
+            (board_id, user_id, "My Board", 0, now, now),
+        )
+        with connection.cursor() as cursor:
+            cursor.executemany(
+                "INSERT INTO `columns`(id, board_id, title, position) VALUES (%s, %s, %s, %s)",
+                [
+                    (f"{board_id}-{col_id}", board_id, col_title, col_pos)
+                    for col_id, col_title, col_pos in DEFAULT_COLUMNS
+                ],
+            )
 
 
 def delete_user(user_id: str) -> None:
