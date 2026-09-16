@@ -11,7 +11,7 @@ export const UsersView = ({ remote = false }: { remote?: boolean }) => {
   const [error, setError] = useState('')
   const [userToDelete, setUserToDelete] = useState<User | null>(null)
   const [showCreate, setShowCreate] = useState(false)
-  const [form, setForm] = useState({ username: '', password: '' })
+  const [form, setForm] = useState({ email: '' })
   const [createError, setCreateError] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
@@ -45,29 +45,28 @@ export const UsersView = ({ remote = false }: { remote?: boolean }) => {
   }
 
   const openCreate = () => {
-    setForm({ username: '', password: '' })
+    setForm({ email: '' })
     setCreateError('')
     setShowCreate(true)
   }
 
   const handleCreate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    const username = form.username.trim()
-    const password = form.password
-    if (!username || !password) {
-      setCreateError('Username and password are required.')
+    const email = form.email.trim()
+    if (!email || !email.includes('@')) {
+      setCreateError('A valid email is required.')
       return
     }
     setSubmitting(true)
     try {
-      const next = await createUser(username, password)
+      const next = await createUser(email)
       setUsers(next)
       setShowCreate(false)
     } catch (requestError) {
       setCreateError(
         (requestError as { status?: number }).status === 409
-          ? 'That username already exists.'
-          : 'Unable to create that user.',
+          ? 'That email already exists.'
+          : 'Unable to add that email.',
       )
     } finally {
       setSubmitting(false)
@@ -84,7 +83,7 @@ export const UsersView = ({ remote = false }: { remote?: boolean }) => {
             onClick={openCreate}
             className='rounded-full bg-[var(--secondary-purple)] px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110'
           >
-            Create
+            Add email
           </button>
         ) : null}
       </div>
@@ -102,7 +101,7 @@ export const UsersView = ({ remote = false }: { remote?: boolean }) => {
           <thead>
             <tr>
               <th>ID</th>
-              <th>Username</th>
+              <th>Email</th>
               <th>Created</th>
               <th>Action</th>
             </tr>
@@ -111,7 +110,7 @@ export const UsersView = ({ remote = false }: { remote?: boolean }) => {
             {users.map((user, index) => (
               <tr key={user.id}>
                 <td>{index + 1}</td>
-                <td>{user.username}</td>
+                <td>{user.email ?? user.username}</td>
                 <td>
                   {user.created_at
                     ? new Date(user.created_at).toLocaleString()
@@ -138,7 +137,7 @@ export const UsersView = ({ remote = false }: { remote?: boolean }) => {
         title='Delete user'
         message={
           userToDelete
-            ? `"${userToDelete.username}" will be permanently removed, along with their boards.`
+            ? `"${userToDelete.email ?? userToDelete.username}" will be permanently removed, along with their boards.`
             : ''
         }
         confirmLabel='Delete'
@@ -164,7 +163,7 @@ export const UsersView = ({ remote = false }: { remote?: boolean }) => {
                 onClick={(event) => event.stopPropagation()}
               >
                 <h3 className='font-display text-lg font-semibold text-[var(--navy-dark)]'>
-                  Create user
+                  Add allowed email
                 </h3>
                 {createError ? (
                   <p className='mt-2 text-sm font-semibold text-[var(--accent-red)]'>
@@ -173,30 +172,17 @@ export const UsersView = ({ remote = false }: { remote?: boolean }) => {
                 ) : null}
                 <form onSubmit={handleCreate} className='login-form mt-4'>
                   <label>
-                    Username
+                    Email
                     <input
-                      type='text'
-                      value={form.username}
+                      type='email'
+                      value={form.email}
                       onChange={(event) =>
-                        setForm((prev) => ({ ...prev, username: event.target.value }))
+                        setForm((prev) => ({ ...prev, email: event.target.value }))
                       }
-                      placeholder='username'
+                      placeholder='name@example.com'
                       autoComplete='off'
                       required
                       autoFocus
-                    />
-                  </label>
-                  <label>
-                    Password
-                    <input
-                      type='password'
-                      value={form.password}
-                      onChange={(event) =>
-                        setForm((prev) => ({ ...prev, password: event.target.value }))
-                      }
-                      placeholder='password'
-                      autoComplete='new-password'
-                      required
                     />
                   </label>
                   <div className='mt-2 flex justify-end gap-3'>
@@ -212,7 +198,7 @@ export const UsersView = ({ remote = false }: { remote?: boolean }) => {
                       disabled={submitting}
                       className='rounded-full bg-[var(--secondary-purple)] px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-60'
                     >
-                      {submitting ? 'Creating...' : 'Create'}
+                      {submitting ? 'Adding...' : 'Add'}
                     </button>
                   </div>
                 </form>
