@@ -84,7 +84,6 @@ body {
   }
 }
 
-/* Banner tabs (ported from hopeland2 admin banner) */
 .admin-banner-nav {
   display: flex;
   align-items: center;
@@ -113,7 +112,6 @@ body {
   background-color: rgba(255, 255, 255, 0.12);
 }
 
-/* Content pages (ported from hopeland2 .admin-page) */
 .admin-page {
   background-color: #fff;
   color: var(--navy-dark);
@@ -154,7 +152,6 @@ body {
   font-weight: 600;
 }
 
-/* Login / sign-in (ported from hopeland2 admin login) */
 .admin-login-page {
   min-height: 100vh;
   display: flex;

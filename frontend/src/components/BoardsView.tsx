@@ -10,6 +10,7 @@ import {
   listBoards,
   type BoardSummary,
 } from '@/lib/api'
+import { resolveBoardId } from '@/lib/boardUrl'
 import type { BoardData } from '@/lib/kanban'
 
 type BoardsViewProps = {
@@ -42,7 +43,11 @@ export const BoardsView = ({ onLogout, remote = false }: BoardsViewProps) => {
     listBoards()
       .then((list) => {
         setBoards(list)
-        setActiveBoardId((prev) => prev ?? list[0]?.id ?? null)
+        const fromUrl = resolveBoardId(
+          list,
+          new URLSearchParams(window.location.search).get('board'),
+        )
+        setActiveBoardId((prev) => prev ?? fromUrl)
       })
       .catch((requestError: { status?: number }) => {
         if (!handleUnauthorized(requestError)) {
@@ -50,6 +55,26 @@ export const BoardsView = ({ onLogout, remote = false }: BoardsViewProps) => {
         }
       })
   }, [remote, handleUnauthorized])
+
+  // Reflect the active board in the URL (?board=<title>) so it is shareable and
+  // survives a refresh. replaceState keeps board switches out of history.
+  useEffect(() => {
+    if (!remote || !activeBoardId) {
+      return
+    }
+    const active = boards.find((board) => board.id === activeBoardId)
+    if (!active) {
+      return
+    }
+    const params = new URLSearchParams(window.location.search)
+    params.set('board', active.title)
+    const query = params.toString()
+    window.history.replaceState(
+      null,
+      '',
+      query ? `?${query}` : window.location.pathname,
+    )
+  }, [remote, activeBoardId, boards])
 
   const handleBoardLoaded = useCallback((board: BoardData) => {
     setCardCount(Object.keys(board.cards).length)
