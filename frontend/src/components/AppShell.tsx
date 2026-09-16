@@ -6,7 +6,7 @@ import { DashboardView } from '@/components/DashboardView'
 import { UsersView } from '@/components/UsersView'
 import { getSession } from '@/lib/api'
 
-const logo = './main-logo.png'
+const logo = './mission-board-logo.png'
 
 type View = 'home' | 'users' | 'boards'
 
