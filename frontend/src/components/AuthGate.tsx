@@ -45,10 +45,15 @@ export const AuthGate = () => {
     // Show, then clear, a one-time error passed back from the Google callback.
     const params = new URLSearchParams(window.location.search)
     const authError = params.get('auth_error')
-    if (authError === 'not_allowed') {
-      setError('That Google account is not allowed. Ask an admin to add it under Users.')
-    } else if (authError === 'google') {
-      setError('Google sign-in failed. Please try again.')
+    const message =
+      authError === 'not_allowed'
+        ? 'That Google account is not allowed. Ask an admin to add it under Users.'
+        : authError === 'google'
+          ? 'Google sign-in failed. Please try again.'
+          : ''
+    if (message) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time error derived from the URL on mount; window is not available in an SSR state initializer
+      setError(message)
     }
     if (authError) {
       params.delete('auth_error')

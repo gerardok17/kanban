@@ -17,7 +17,8 @@ export const UsersView = ({ remote = false }: { remote?: boolean }) => {
 
   useEffect(() => {
     if (!remote) {
-      setLoading(false)
+      // `loading` already initialises to `remote` (false here), so there is
+      // nothing to reset — just skip the fetch in demo mode.
       return
     }
     const controller = new AbortController()
