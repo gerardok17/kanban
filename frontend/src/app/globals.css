@@ -10,13 +10,13 @@
   --gray-text: #5a6b8c;
 
   /* light surfaces */
-  --surface: #dfe7f7;
+  --surface: #d6d9defa;
   --surface-strong: #ffffff;
   --stroke: rgba(3, 33, 71, 0.1);
   --shadow: 0 18px 40px rgba(3, 33, 71, 0.16);
 
   /* dark glass (cards, header, login, sidebar) */
-  --card-dark: rgba(4, 21, 81, 0.78);
+  --card-dark: rgba(1, 10, 43, 0.78);
   --card-border-light: rgba(255, 255, 255, 0.12);
 
   --card-white: #ffffffc7;
