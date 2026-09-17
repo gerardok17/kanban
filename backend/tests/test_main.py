@@ -51,36 +51,25 @@ def test_health_route_returns_ok() -> None:
     assert response.json() == {"status": "ok"}
 
 
-def test_invalid_login_is_rejected() -> None:
-    response = client.post(
-        "/api/auth/login", json={"username": "user", "password": "wrong"}
-    )
+def sign_in(username: str = "user") -> None:
+    # There is no password login to call anymore (sign-in is Google-only); mint a
+    # backend session directly so the authenticated-endpoint tests can run.
+    from app.main import sessions
 
-    assert response.status_code == 401
-    assert response.json() == {"detail": "Invalid credentials"}
+    sessions["test-session"] = username
+    client.cookies.set("session", "test-session")
 
 
-def test_login_session_and_logout() -> None:
-    login_response = client.post(
-        "/api/auth/login", json={"username": "user", "password": "password"}
-    )
-    assert login_response.status_code == 200
-    assert login_response.json() == {"username": "user"}
+def test_session_and_logout() -> None:
+    sign_in()
 
     session_response = client.get("/api/auth/session")
     assert session_response.status_code == 200
-    assert session_response.json() == {"username": "user"}
+    assert session_response.json()["username"] == "user"
 
     logout_response = client.post("/api/auth/logout")
     assert logout_response.status_code == 200
     assert client.get("/api/auth/session").status_code == 401
-
-
-def sign_in() -> None:
-    response = client.post(
-        "/api/auth/login", json={"username": "user", "password": "password"}
-    )
-    assert response.status_code == 200
 
 
 def test_board_requires_authentication() -> None:

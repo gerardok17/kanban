@@ -32,6 +32,10 @@ GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI", "")
 # Signs the short-lived cookie that carries the OAuth state/nonce between the
 # login redirect and the callback. Set a real random value in production.
 SESSION_SECRET = os.getenv("SESSION_SECRET", "dev-insecure-session-secret")
+# Mark auth cookies Secure (HTTPS-only) in production. Off by default so local
+# http://localhost development still works; set SESSION_COOKIE_SECURE=true wherever
+# the app is served over HTTPS (e.g. behind the Cloudflare tunnel).
+COOKIE_SECURE = os.getenv("SESSION_COOKIE_SECURE", "false").lower() in ("1", "true", "yes")
 
 # Distinct cookie name: the app's own auth cookie is "session"; this one only
 # carries the transient OAuth state/nonce, so they must not collide.
@@ -40,6 +44,7 @@ app.add_middleware(
     secret_key=SESSION_SECRET,
     session_cookie="oauth_state",
     same_site="lax",
+    https_only=COOKIE_SECURE,
 )
 
 oauth = OAuth()
@@ -52,11 +57,6 @@ if google_enabled:
         server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
         client_kwargs={"scope": "openid email profile"},
     )
-
-
-class LoginRequest(BaseModel):
-    username: str
-    password: str
 
 
 class ColumnRenameRequest(BaseModel):
@@ -97,28 +97,17 @@ def require_session(session: str | None) -> str:
     return sessions[session]
 
 
-@app.post("/api/auth/login")
-def login(payload: LoginRequest, response: Response) -> dict[str, str]:
-    username = database.authenticate(payload.username, payload.password)
-    if username is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
-
-    session = token_urlsafe(32)
-    sessions[session] = username
-    response.set_cookie("session", session, httponly=True, samesite="lax", max_age=86400)
-    return {"username": username}
-
-
 @app.get("/api/auth/session")
-def get_session(session: str | None = Cookie(default=None)) -> dict[str, str]:
-    return {"username": require_session(session)}
+def get_session(session: str | None = Cookie(default=None)) -> dict[str, str | None]:
+    username = require_session(session)
+    return {"username": username, "email": database.email_for_username(username)}
 
 
 @app.post("/api/auth/logout")
 def logout(response: Response, session: str | None = Cookie(default=None)) -> dict[str, str]:
     if session is not None:
         sessions.pop(session, None)
-    response.delete_cookie("session")
+    response.delete_cookie("session", samesite="lax", secure=COOKIE_SECURE)
     return {"status": "signed_out"}
 
 
@@ -151,7 +140,14 @@ async def google_callback(request: Request):
     session_token = token_urlsafe(32)
     sessions[session_token] = username
     response = RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-    response.set_cookie("session", session_token, httponly=True, samesite="lax", max_age=86400)
+    response.set_cookie(
+        "session",
+        session_token,
+        httponly=True,
+        samesite="lax",
+        secure=COOKIE_SECURE,
+        max_age=86400,
+    )
     return response
 
 
