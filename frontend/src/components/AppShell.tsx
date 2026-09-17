@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { BoardsView } from '@/components/BoardsView'
 import { DashboardView } from '@/components/DashboardView'
 import { UsersView } from '@/components/UsersView'
@@ -17,16 +17,41 @@ type AppShellProps = {
 
 export const AppShell = ({ onLogout, remote = false }: AppShellProps) => {
   const [view, setView] = useState<View>('boards')
-  const [username, setUsername] = useState('')
+  const [email, setEmail] = useState('')
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!remote) {
       return
     }
     getSession()
-      .then((session) => setUsername(session.username))
+      .then((session) => setEmail(session.email ?? session.username))
       .catch(() => {})
   }, [remote])
+
+  // Close the account menu on an outside click or Escape.
+  useEffect(() => {
+    if (!menuOpen) {
+      return
+    }
+    const onPointerDown = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setMenuOpen(false)
+      }
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setMenuOpen(false)
+      }
+    }
+    window.addEventListener('mousedown', onPointerDown)
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      window.removeEventListener('mousedown', onPointerDown)
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [menuOpen])
 
   return (
     <div className='relative h-screen overflow-hidden'>
@@ -43,27 +68,68 @@ export const AppShell = ({ onLogout, remote = false }: AppShellProps) => {
           <div className='admin-banner-nav'>
             <button
               type='button'
-              onClick={() => setView('users')}
-              className={`admin-banner-link ${view === 'users' ? 'active' : ''}`}
-            >
-              Users
-            </button>
-            <button
-              type='button'
               onClick={() => setView('boards')}
               className={`admin-banner-link ${view === 'boards' ? 'active' : ''}`}
             >
               Boards
             </button>
-            {onLogout ? (
+            <div className='admin-banner-usermenu' ref={menuRef}>
               <button
                 type='button'
-                onClick={onLogout}
-                className='admin-banner-link logout-button'
+                onClick={() => setMenuOpen((open) => !open)}
+                className={`admin-banner-usermenu-trigger ${
+                  view === 'users' || menuOpen ? 'active' : ''
+                }`}
+                aria-haspopup='menu'
+                aria-expanded={menuOpen}
+                aria-label='Account menu'
               >
-                Log out{username ? ` (${username})` : ''}
+                <svg
+                  width='22'
+                  height='22'
+                  viewBox='0 0 24 24'
+                  fill='none'
+                  stroke='currentColor'
+                  strokeWidth='2'
+                  strokeLinecap='round'
+                  strokeLinejoin='round'
+                  aria-hidden='true'
+                >
+                  <path d='M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2' />
+                  <circle cx='9' cy='7' r='4' />
+                  <path d='M22 21v-2a4 4 0 0 0-3-3.87' />
+                  <path d='M16 3.13a4 4 0 0 1 0 7.75' />
+                </svg>
               </button>
-            ) : null}
+              {menuOpen ? (
+                <div className='admin-banner-usermenu-dropdown' role='menu'>
+                  <button
+                    type='button'
+                    role='menuitem'
+                    className='admin-banner-usermenu-item'
+                    onClick={() => {
+                      setView('users')
+                      setMenuOpen(false)
+                    }}
+                  >
+                    Users
+                  </button>
+                  {onLogout ? (
+                    <button
+                      type='button'
+                      role='menuitem'
+                      className='admin-banner-usermenu-item'
+                      onClick={() => {
+                        setMenuOpen(false)
+                        onLogout()
+                      }}
+                    >
+                      Log out{email ? ` (${email})` : ''}
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
       </nav>

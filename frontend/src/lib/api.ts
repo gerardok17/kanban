@@ -20,7 +20,8 @@ const request = async <T>(path: string, options?: RequestInit): Promise<T> => {
   return response.json() as Promise<T>;
 };
 
-export const getSession = () => request<{ username: string }>("/api/auth/session");
+export const getSession = () =>
+  request<{ username: string; email: string | null }>("/api/auth/session");
 
 export const getBoard = () => request<BoardData>("/api/board");
 

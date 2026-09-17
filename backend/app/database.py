@@ -4,7 +4,6 @@ from datetime import datetime, timezone
 from secrets import token_urlsafe
 from typing import Any, Iterator
 
-import bcrypt
 import pymysql
 from pymysql.connections import Connection
 from pymysql.cursors import DictCursor
@@ -21,10 +20,10 @@ DB_CONFIG: dict[str, Any] = {
     "autocommit": False,
 }
 
-SEED_USERNAME = "gerardok17"
-SEED_PASSWORD = "gerardok17"
 # Bootstrap allowlist email for the seed user, read from the environment so the
-# public repo never carries a personal address. Unset means no email is seeded.
+# public repo never carries credentials. The app is Google-only, so a seed user
+# only makes sense with an allowlist email; unset means no user is seeded (and no
+# default, previously guessable, account ever ships).
 SEED_EMAIL = os.getenv("SEED_EMAIL", "").strip()
 
 # Default columns every new board starts with (renameable in the UI).
@@ -125,17 +124,6 @@ def utc_now() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
-def hash_password(password: str) -> str:
-    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
-
-
-def verify_password(password: str, password_hash: str) -> bool:
-    try:
-        return bcrypt.checkpw(password.encode(), password_hash.encode())
-    except ValueError:
-        return False
-
-
 @contextmanager
 def connect() -> Iterator[Connection]:
     connection = pymysql.connect(**DB_CONFIG)
@@ -186,54 +174,46 @@ def initialize_database() -> None:
             "INSERT IGNORE INTO schema_migrations(version, applied_at) VALUES (3, %s)",
             (utc_now(),),
         )
-        existing = _one(
-            connection, "SELECT id FROM users WHERE username = %s", (SEED_USERNAME,)
-        )
-        if existing is None:
-            _seed_initial(connection)
-        # Backfill the seed user's allowlist email (covers already-seeded DBs such
-        # as production) without overwriting an email already set.
+        # Seed a single Google-only owner, keyed on the allowlist email. No user
+        # is seeded without SEED_EMAIL, so the public repo never ships a default
+        # (previously guessable) account. Keyed on email — not a username — so an
+        # already-seeded database (e.g. production) is recognised and never
+        # re-seeded, and no local password is ever created.
         if SEED_EMAIL:
-            _exec(
+            existing = _one(
                 connection,
-                "UPDATE users SET email = %s WHERE username = %s AND (email IS NULL OR email = '')",
-                (SEED_EMAIL, SEED_USERNAME),
+                "SELECT id FROM users WHERE LOWER(email) = %s",
+                (SEED_EMAIL.lower(),),
             )
+            if existing is None:
+                _seed_initial(connection, SEED_EMAIL)
 
 
-def _seed_initial(connection: Connection) -> None:
+def _seed_initial(connection: Connection, email: str) -> None:
+    """Seed the first owner as a Google-only user (no local password) plus an
+    empty starter board — mirrors create_allowlisted_user for the bootstrap user."""
     now = utc_now()
+    normalized = email.strip().lower()
+    user_id = f"user-{token_urlsafe(12)}"
     _exec(
         connection,
-        "INSERT INTO users(id, username, password_hash, email, created_at) VALUES (%s, %s, %s, %s, %s)",
-        ("user-gerardok17", SEED_USERNAME, hash_password(SEED_PASSWORD), SEED_EMAIL or None, now),
+        "INSERT INTO users(id, username, password_hash, email, created_at) VALUES (%s, %s, NULL, %s, %s)",
+        (user_id, normalized, normalized, now),
     )
+    board_id = f"board-{token_urlsafe(12)}"
     _exec(
         connection,
         "INSERT INTO boards(id, user_id, title, position, created_at, updated_at) VALUES (%s, %s, %s, %s, %s, %s)",
-        ("board-1", "user-gerardok17", "My Board", 0, now, now),
+        (board_id, user_id, "My Board", 0, now, now),
     )
     with connection.cursor() as cursor:
         cursor.executemany(
-            "INSERT INTO `columns`(id, board_id, title, position) VALUES (%s, 'board-1', %s, %s)",
-            DEFAULT_COLUMNS,
+            "INSERT INTO `columns`(id, board_id, title, position) VALUES (%s, %s, %s, %s)",
+            [
+                (f"{board_id}-{col_id}", board_id, col_title, col_pos)
+                for col_id, col_title, col_pos in DEFAULT_COLUMNS
+            ],
         )
-
-
-def authenticate(username: str, password: str) -> str | None:
-    with connect() as connection:
-        user = _one(
-            connection,
-            "SELECT username, password_hash FROM users WHERE username = %s",
-            (username,),
-        )
-    if (
-        user is None
-        or not user["password_hash"]
-        or not verify_password(password, user["password_hash"])
-    ):
-        return None
-    return user["username"]
 
 
 def list_users() -> list[dict[str, Any]]:
@@ -265,20 +245,6 @@ def _first_user_id(connection: Connection) -> str | None:
     return row["id"] if row else None
 
 
-def create_user(user_id: str, username: str, password: str) -> None:
-    with connect() as connection:
-        existing = _one(
-            connection, "SELECT id FROM users WHERE username = %s", (username,)
-        )
-        if existing is not None:
-            raise ValueError("Username already exists")
-        _exec(
-            connection,
-            "INSERT INTO users(id, username, password_hash, created_at) VALUES (%s, %s, %s, %s)",
-            (user_id, username, hash_password(password), utc_now()),
-        )
-
-
 def user_for_email(email: str) -> str | None:
     """Username for an allowlisted email (case-insensitive), or None if the email
     is not on the allowlist. Backs the Google (OIDC) sign-in check."""
@@ -292,6 +258,17 @@ def user_for_email(email: str) -> str | None:
             (normalized,),
         )
     return row["username"] if row else None
+
+
+def email_for_username(username: str) -> str | None:
+    """The allowlist email for a signed-in username, for display in the UI."""
+    with connect() as connection:
+        row = _one(
+            connection,
+            "SELECT email FROM users WHERE username = %s",
+            (username,),
+        )
+    return row["email"] if row and row["email"] else None
 
 
 def create_allowlisted_user(user_id: str, email: str) -> None:
