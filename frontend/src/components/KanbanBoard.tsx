@@ -53,6 +53,7 @@ export const KanbanBoard = ({
     if (!remote) {
       return
     }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- show the loading state while the board fetch below is in flight
     setIsLoading(true)
     const load = boardId ? getBoardById(boardId) : getBoard()
     void load
