@@ -1,0 +1,418 @@
+<title>Mission Board Architecture</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    --ground: #dfe7f7;
+    --panel: #eaf0fb;
+    --panel-2: #f4f8fe;
+    --surface: #ffffff;
+    --ink: #032147;
+    --ink-soft: #40536f;
+    --muted: #6b7a90;
+    --line: rgba(3, 33, 71, 0.14);
+    --accent: #ecad0a;
+    --blue: #209dd7;
+    --purple: #753991;
+    --green: #3e9c31;
+    --shadow: 0 10px 30px rgba(3, 33, 71, 0.10);
+    --radius: 14px;
+  }
+  :root:not([data-theme="light"]) {
+    @media (prefers-color-scheme: dark) {
+      --ground: #061529;
+      --panel: rgba(255, 255, 255, 0.035);
+      --panel-2: rgba(255, 255, 255, 0.02);
+      --surface: rgba(11, 31, 60, 0.72);
+      --ink: #eaf1fb;
+      --ink-soft: #b7c6dc;
+      --muted: #8ea3bf;
+      --line: rgba(255, 255, 255, 0.14);
+      --accent: #f2bb2e;
+      --blue: #45b3e6;
+      --purple: #b07bd0;
+      --green: #57c246;
+      --shadow: 0 12px 34px rgba(0, 0, 0, 0.4);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #061529;
+    --panel: rgba(255, 255, 255, 0.035);
+    --panel-2: rgba(255, 255, 255, 0.02);
+    --surface: rgba(11, 31, 60, 0.72);
+    --ink: #eaf1fb;
+    --ink-soft: #b7c6dc;
+    --muted: #8ea3bf;
+    --line: rgba(255, 255, 255, 0.14);
+    --accent: #f2bb2e;
+    --blue: #45b3e6;
+    --purple: #b07bd0;
+    --green: #57c246;
+    --shadow: 0 12px 34px rgba(0, 0, 0, 0.4);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink-soft);
+    font-family: "Manrope", system-ui, -apple-system, sans-serif;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap {
+    max-width: 940px;
+    margin: 0 auto;
+    padding: 4rem 1.5rem 5rem;
+  }
+
+  .eyebrow {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 0.9rem;
+  }
+  h1 {
+    font-family: "Space Grotesk", system-ui, sans-serif;
+    font-weight: 700;
+    font-size: clamp(2.1rem, 5vw, 3rem);
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+    color: var(--ink);
+    margin: 0 0 1rem;
+  }
+  .lede {
+    font-size: 1.2rem;
+    max-width: 60ch;
+    margin: 0 0 1.75rem;
+  }
+  .lede strong { color: var(--ink); font-weight: 700; }
+
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 0.75rem;
+    padding: 0;
+    margin: 0;
+    list-style: none;
+  }
+  .meta li {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 0.78rem;
+    color: var(--ink-soft);
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 0.35rem 0.8rem;
+  }
+  .meta b { color: var(--accent); font-weight: 500; }
+
+  section { margin-top: 3.5rem; }
+  h2 {
+    font-family: "Space Grotesk", system-ui, sans-serif;
+    font-weight: 600;
+    font-size: 1.5rem;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+    margin: 0 0 1.25rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid var(--line);
+  }
+  h3 {
+    font-family: "Space Grotesk", system-ui, sans-serif;
+    font-weight: 600;
+    font-size: 1.05rem;
+    color: var(--ink);
+    margin: 0 0 0.35rem;
+  }
+  p { margin: 0 0 1rem; max-width: 68ch; }
+  a { color: var(--blue); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  code {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 0.86em;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 0.08em 0.4em;
+    color: var(--ink);
+  }
+
+  /* Diagram */
+  figure { margin: 0; }
+  .diagram-card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 1.5rem;
+    overflow-x: auto;
+  }
+  .diagram-card svg { display: block; width: 100%; height: auto; min-width: 560px; }
+  figcaption {
+    font-size: 0.9rem;
+    color: var(--muted);
+    margin-top: 0.9rem;
+    text-align: center;
+    text-wrap: balance;
+  }
+
+  /* Numbered pieces */
+  .pieces { display: grid; gap: 1rem; }
+  .piece {
+    display: grid;
+    grid-template-columns: 2.6rem 1fr;
+    gap: 0 1rem;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--blue);
+    border-radius: 10px;
+    padding: 1.1rem 1.3rem;
+  }
+  .piece .n {
+    grid-row: 1 / span 2;
+    font-family: "Space Grotesk", system-ui, sans-serif;
+    font-weight: 700;
+    font-size: 1.4rem;
+    color: var(--accent);
+    line-height: 1;
+  }
+  .piece p { margin: 0; font-size: 0.96rem; }
+  .piece p + p { margin-top: 0.5rem; }
+
+  pre {
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 1rem 1.15rem;
+    overflow-x: auto;
+    margin: 0.25rem 0 0;
+  }
+  pre code {
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: 0.82rem;
+    line-height: 1.7;
+    color: var(--ink-soft);
+  }
+  .k { color: var(--purple); }
+  .s { color: var(--green); }
+
+  /* Security story */
+  .props { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 1rem; }
+  .prop {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 1.1rem 1.2rem;
+  }
+  .prop h3 { display: flex; align-items: baseline; gap: 0.5rem; }
+  .prop h3::before {
+    content: "";
+    width: 8px; height: 8px; border-radius: 2px;
+    background: var(--green);
+    flex: none;
+    transform: translateY(-1px);
+  }
+  .prop p { font-size: 0.92rem; margin: 0; color: var(--ink-soft); }
+
+  /* Contrast table */
+  .table-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); }
+  table { border-collapse: collapse; width: 100%; min-width: 520px; font-size: 0.92rem; }
+  caption { text-align: left; color: var(--muted); font-size: 0.9rem; margin-bottom: 0.75rem; }
+  th, td { text-align: left; padding: 0.8rem 1.1rem; border-bottom: 1px solid var(--line); }
+  thead th { background: var(--panel); color: var(--ink); font-family: "Space Grotesk", sans-serif; font-weight: 600; }
+  tbody th { color: var(--ink); font-weight: 600; }
+  tbody tr:last-child td, tbody tr:last-child th { border-bottom: none; }
+  td.mb { color: var(--blue); }
+  td.hl { color: var(--purple); }
+
+  .foot {
+    margin-top: 3.5rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--line);
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    a { transition: color 0.15s ease; }
+  }
+</style>
+
+<div class="wrap">
+  <header>
+    <p class="eyebrow">Mission Board · homelab</p>
+    <h1>Mission Board Architecture</h1>
+    <p class="lede">Reachable at <strong>mission-board.com.mx</strong> from anywhere &mdash; with <strong>zero inbound ports</strong> opened at home. Cloudflare reaches in through a tunnel the machine dials out.</p>
+    <ul class="meta">
+      <li>host <b>hyperion</b> (Debian)</li>
+      <li>app <b>Next.js + FastAPI</b></li>
+      <li>data <b>MariaDB</b></li>
+      <li>auth <b>Google OIDC</b></li>
+    </ul>
+  </header>
+
+  <section aria-label="Request flow diagram">
+    <figure>
+      <div class="diagram-card">
+        <svg viewBox="0 0 860 662" role="img" aria-label="A browser reaches mission-board.com.mx at the Cloudflare edge, which terminates TLS and connects to hyperion only through an outbound tunnel that cloudflared dials out, so no inbound ports are opened. cloudflared forwards to the app on loopback 127.0.0.1:8000, a Docker container on the homelab-net network, which reads and writes the shared MariaDB database kanbanpmdb by container name. The app gates every request through Google OIDC with an email allowlist.">
+          <defs>
+            <marker id="ah" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0 0 L10 5 L0 10 z" fill="var(--ink-soft)"></path>
+            </marker>
+            <marker id="ahy" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0 0 L10 5 L0 10 z" fill="var(--accent)"></path>
+            </marker>
+          </defs>
+
+          <!-- Browser -->
+          <rect x="280" y="18" width="200" height="46" rx="10" fill="var(--surface)" stroke="var(--line)"></rect>
+          <text x="380" y="46" text-anchor="middle" font-family="Manrope, sans-serif" font-size="14" font-weight="600" fill="var(--ink)">Browser &mdash; any device</text>
+          <line x1="380" y1="64" x2="380" y2="94" stroke="var(--ink-soft)" stroke-width="1.6" marker-end="url(#ah)"></line>
+          <text x="392" y="83" font-family="JetBrains Mono, monospace" font-size="11" fill="var(--muted)">HTTPS</text>
+
+          <!-- Cloudflare edge -->
+          <rect x="205" y="98" width="350" height="108" rx="14" fill="var(--panel)" stroke="var(--line)"></rect>
+          <text x="223" y="122" font-family="JetBrains Mono, monospace" font-size="11" letter-spacing="0.16em" fill="var(--blue)">CLOUDFLARE EDGE</text>
+          <rect x="223" y="132" width="314" height="28" rx="8" fill="var(--surface)" stroke="var(--line)"></rect>
+          <text x="380" y="150" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11.5" fill="var(--ink)">DNS &middot; mission-board.com.mx</text>
+          <rect x="223" y="166" width="314" height="28" rx="8" fill="var(--surface)" stroke="var(--line)"></rect>
+          <text x="380" y="184" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11.5" fill="var(--ink)">TLS termination &middot; public cert</text>
+
+          <!-- Tunnel (the hinge) -->
+          <line x1="380" y1="206" x2="380" y2="252" stroke="var(--accent)" stroke-width="2.6" marker-start="url(#ahy)" marker-end="url(#ahy)"></line>
+          <text x="398" y="224" font-family="JetBrains Mono, monospace" font-size="11" font-weight="500" fill="var(--accent)">outbound tunnel</text>
+          <text x="398" y="240" font-family="JetBrains Mono, monospace" font-size="11" font-weight="500" fill="var(--accent)">no inbound ports</text>
+
+          <!-- hyperion boundary -->
+          <rect x="58" y="258" width="644" height="386" rx="16" fill="var(--panel-2)" stroke="var(--ink-soft)" stroke-width="1.3" stroke-dasharray="6 5"></rect>
+          <text x="80" y="284" font-family="JetBrains Mono, monospace" font-size="11" letter-spacing="0.16em" fill="var(--ink-soft)">HYPERION &middot; DEBIAN, AT HOME</text>
+
+          <!-- cloudflared -->
+          <rect x="270" y="300" width="220" height="52" rx="10" fill="var(--surface)" stroke="var(--line)"></rect>
+          <text x="380" y="322" text-anchor="middle" font-family="Manrope, sans-serif" font-size="14" font-weight="700" fill="var(--ink)">cloudflared</text>
+          <text x="380" y="339" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10.5" fill="var(--muted)">systemd tunnel 16f8ff0d&hellip;</text>
+          <line x1="380" y1="352" x2="380" y2="392" stroke="var(--ink-soft)" stroke-width="1.6" marker-end="url(#ah)"></line>
+          <text x="392" y="376" font-family="JetBrains Mono, monospace" font-size="10.5" fill="var(--muted)">http://localhost:8000</text>
+
+          <!-- homelab-net -->
+          <rect x="110" y="398" width="540" height="230" rx="13" fill="none" stroke="var(--blue)" stroke-width="1.2" stroke-dasharray="4 4" opacity="0.85"></rect>
+          <text x="128" y="420" font-family="JetBrains Mono, monospace" font-size="11" letter-spacing="0.14em" fill="var(--blue)">DOCKER NETWORK &middot; homelab-net</text>
+
+          <!-- app -->
+          <rect x="170" y="432" width="420" height="70" rx="10" fill="var(--surface)" stroke="var(--line)"></rect>
+          <text x="380" y="458" text-anchor="middle" font-family="Manrope, sans-serif" font-size="14.5" font-weight="700" fill="var(--ink)">project-management-mvp</text>
+          <text x="380" y="478" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11" fill="var(--ink-soft)">Next.js + FastAPI &middot; 127.0.0.1:8000</text>
+          <line x1="380" y1="502" x2="380" y2="540" stroke="var(--ink-soft)" stroke-width="1.6" marker-end="url(#ah)"></line>
+          <text x="392" y="525" font-family="JetBrains Mono, monospace" font-size="10.5" fill="var(--muted)">PyMySQL &middot; by name</text>
+
+          <!-- database -->
+          <path d="M255 560 q0 -12 125 -12 q125 0 125 12 l0 46 q0 12 -125 12 q-125 0 -125 -12 z" fill="var(--surface)" stroke="var(--line)"></path>
+          <path d="M255 560 q0 12 125 12 q125 0 125 -12" fill="none" stroke="var(--line)"></path>
+          <text x="380" y="588" text-anchor="middle" font-family="Manrope, sans-serif" font-size="13.5" font-weight="700" fill="var(--ink)">homelab-db &middot; MariaDB</text>
+          <text x="380" y="605" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10.5" fill="var(--muted)">database: kanbanpmdb</text>
+
+          <!-- Google OIDC (external) -->
+          <rect x="712" y="432" width="132" height="70" rx="10" fill="var(--panel)" stroke="var(--line)"></rect>
+          <text x="778" y="460" text-anchor="middle" font-family="Manrope, sans-serif" font-size="13.5" font-weight="700" fill="var(--ink)">Google OIDC</text>
+          <text x="778" y="478" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10" fill="var(--muted)">email</text>
+          <text x="778" y="491" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10" fill="var(--muted)">allowlist</text>
+          <path d="M590 460 C 650 460, 660 467, 710 467" fill="none" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#ah)"></path>
+          <text x="628" y="452" font-family="JetBrains Mono, monospace" font-size="10.5" fill="var(--purple)">OAuth</text>
+        </svg>
+      </div>
+      <figcaption>The request path. The one arrow that matters: Cloudflare and hyperion are joined only by a tunnel <em>hyperion dials outward</em> &mdash; nothing listens for the internet at home.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <h2>The pieces</h2>
+    <div class="pieces">
+      <div class="piece">
+        <span class="n">1</span>
+        <h3>Public entry &mdash; Cloudflare</h3>
+        <p><code>mission-board.com.mx</code> is managed in Cloudflare, which answers DNS and terminates <strong>TLS with a real public certificate</strong>, then hands the request to the tunnel. Because TLS ends at the edge, the origin can speak plain HTTP over loopback &mdash; no certificates to manage on hyperion.</p>
+      </div>
+      <div class="piece">
+        <span class="n">2</span>
+        <h3>The tunnel &mdash; cloudflared</h3>
+        <p><code>cloudflared</code> runs as a systemd service on hyperion (tunnel <code>16f8ff0d&hellip;</code>). Its ingress maps the hostname to the local app; anything else falls through to a 404. The connection is <strong>outbound</strong> hyperion&rarr;Cloudflare, so <strong>nothing is opened on the router or LAN</strong>.</p>
+      </div>
+      <div class="piece">
+        <span class="n">3</span>
+        <h3>The app &mdash; Docker on loopback</h3>
+        <p>The container <code>project-management-mvp</code> (Next.js served by FastAPI) is published as <code>127.0.0.1:8000</code> &mdash; <strong>loopback only</strong>, not on the LAN or the Tailscale tailnet. It joins the <code>homelab-net</code> Docker network to reach the database by name. The tunnel is the single door.</p>
+      </div>
+      <div class="piece">
+        <span class="n">4</span>
+        <h3>The database &mdash; shared MariaDB</h3>
+        <p>Data lives in <code>kanbanpmdb</code> inside the shared <code>homelab-db</code> MariaDB container, reached with PyMySQL over <code>homelab-net</code> by container name. Data persists in the volume, so replacing the app container never touches it.</p>
+      </div>
+      <div class="piece">
+        <span class="n">5</span>
+        <h3>Authentication &mdash; Google OIDC</h3>
+        <p>Sign-in is Google OAuth with an <strong>email allowlist</strong>: only added emails may enter. Since the app is publicly reachable, the allowlist is what keeps it private in practice.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>The tunnel config</h2>
+    <p>The whole ingress is four lines &mdash; <code>~/.cloudflared/config.yml</code> on hyperion:</p>
+    <pre><code><span class="k">tunnel:</span> 16f8ff0d-374d-44cc-9e4f-fefdda31adba
+<span class="k">credentials-file:</span> /etc/cloudflared/16f8ff0d-&hellip;.json
+<span class="k">ingress:</span>
+  - <span class="k">hostname:</span> <span class="s">mission-board.com.mx</span>
+    <span class="k">service:</span> <span class="s">http://localhost:8000</span>
+  - <span class="k">service:</span> <span class="s">http_status:404</span></code></pre>
+  </section>
+
+  <section>
+    <h2>Why this shape</h2>
+    <div class="props">
+      <div class="prop">
+        <h3>No inbound ports</h3>
+        <p>The home network exposes nothing. The only channel is the outbound tunnel &mdash; no public IP or port-forward to attack.</p>
+      </div>
+      <div class="prop">
+        <h3>TLS for free</h3>
+        <p>Certificates are provisioned and renewed at Cloudflare's edge. Nothing to install or rotate on hyperion.</p>
+      </div>
+      <div class="prop">
+        <h3>Loopback origin</h3>
+        <p>Even inside the house the app isn't on the LAN or tailnet. The tunnel is the single entry point.</p>
+      </div>
+      <div class="prop">
+        <h3>Auth gate</h3>
+        <p>Public reachability is fine because Google plus the allowlist gate every request.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Two apps, two exposure models</h2>
+    <p>hopeland2 &mdash; the other personal app on hyperion &mdash; is served <strong>privately over the Tailscale tailnet</strong> (Tailscale Serve), reachable only from allowed devices, with the work laptop denied by an ACL. Same box, opposite front door.</p>
+    <div class="table-scroll">
+      <table>
+        <caption>How the two personal apps on hyperion are exposed.</caption>
+        <thead>
+          <tr><th scope="col">&nbsp;</th><th scope="col">Mission Board</th><th scope="col">hopeland2</th></tr>
+        </thead>
+        <tbody>
+          <tr><th scope="row">Reachability</th><td class="mb">Public &middot; mission-board.com.mx</td><td class="hl">Private &middot; tailnet only</td></tr>
+          <tr><th scope="row">Front door</th><td class="mb">Cloudflare Tunnel</td><td class="hl">Tailscale Serve</td></tr>
+          <tr><th scope="row">TLS</th><td class="mb">Cloudflare edge (public cert)</td><td class="hl">Tailscale (Let's Encrypt)</td></tr>
+          <tr><th scope="row">Ports opened</th><td class="mb">None (outbound tunnel)</td><td class="hl">None (loopback + tailnet)</td></tr>
+          <tr><th scope="row">Auth</th><td class="mb">Google OIDC + allowlist</td><td class="hl">Google OIDC + allowlist</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <p class="foot">Reference for Mission Board (kanban). Companion to <code>docs/DATABASE.md</code> (data model) and <code>docs/SETUP.md</code> (local run). Mirrors <code>docs/ARCHITECTURE.md</code>.</p>
+</div>
