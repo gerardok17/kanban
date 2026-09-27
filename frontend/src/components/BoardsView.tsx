@@ -26,6 +26,9 @@ export const BoardsView = ({ onLogout, remote = false }: BoardsViewProps) => {
   const [cardCount, setCardCount] = useState<number | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [error, setError] = useState('')
+  // Bumped when the header's Labels selector changes a label, so the board
+  // reloads its cards' chips.
+  const [labelsVersion, setLabelsVersion] = useState(0)
 
   const handleUnauthorized = useCallback(
     (requestError: { status?: number }) => {
@@ -132,7 +135,11 @@ export const BoardsView = ({ onLogout, remote = false }: BoardsViewProps) => {
       <div className='relative mx-auto flex max-w-[1500px] flex-wrap items-center justify-end gap-3 px-6 pt-4'>
         {activeBoard ? (
           <>
-            <LabelsSelector key={`labels-${activeBoard.id}`} boardId={activeBoard.id} />
+            <LabelsSelector
+              key={`labels-${activeBoard.id}`}
+              boardId={activeBoard.id}
+              onChange={() => setLabelsVersion((version) => version + 1)}
+            />
             <SharedWithSelector
               key={activeBoard.id}
               boardId={activeBoard.id}
@@ -174,6 +181,7 @@ export const BoardsView = ({ onLogout, remote = false }: BoardsViewProps) => {
           remote
           onLogout={onLogout}
           onBoardLoaded={handleBoardLoaded}
+          labelsVersion={labelsVersion}
         />
       ) : null}
 

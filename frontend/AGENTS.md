@@ -19,13 +19,13 @@ This directory contains the existing Next.js Kanban Studio frontend. It is curre
 - `src/app/globals.css` defines the project color variables and base styles.
 - `src/components/KanbanBoard.tsx` owns the in-memory board state, drag handlers, column renaming, and card creation/deletion.
 - `src/components/KanbanColumn.tsx` renders a droppable column, its sortable cards, and the "Add a card" button.
-- `src/components/KanbanCard.tsx` renders a sortable card: title, a 5-line Markdown preview, and view / edit / delete actions.
+- `src/components/KanbanCard.tsx` renders a sortable card: title, a 5-line Markdown preview, its labels, and view / edit / delete actions.
 - `src/components/KanbanCardPreview.tsx` renders the drag overlay.
-- `src/components/CardDialog.tsx` is the card dialog (create / view / edit), opened by `KanbanBoard`; it closes only with Esc, the X, or Cancel/Close. View and edit show who created the card and when, in local time (`src/lib/dates.ts`). Create and edit have a Status select: the card's column, from the board's visible columns; a new status moves the card to the end of that column.
+- `src/components/CardDialog.tsx` is the card dialog (create / view / edit), opened by `KanbanBoard`; it closes only with Esc, the X, or Cancel/Close. View and edit show who created the card and when, in local time (`src/lib/dates.ts`). Create and edit have a Status select: the card's column, from the board's visible columns; a new status moves the card to the end of that column. Create and edit toggle the board's labels on the card (filled when applied); view shows the card's labels read-only.
 - `src/components/RichTextEditor.tsx` is the Tiptap description editor; `src/lib/cardEditor.ts` holds its extensions and the card field limits.
 - `src/components/UsersView.tsx` is the admin-only user administration page (roles, add, delete); `src/components/AddUserDialog.tsx` adds an allowlisted email with its role. `AppShell` shows Users only to admins.
 - `src/components/SharedWithSelector.tsx` sits left of `BoardSelector`: who a board is shared with (owner first), with share/unshare for the owner and a read-only list for everyone else. `BoardSelector` tags boards shared with you.
-- `src/components/LabelsSelector.tsx` sits left of `SharedWithSelector`: the board's labels, which every member can add, edit, and delete. Each color is used once per board. `src/lib/labels.ts` holds the palette (key, hex, and legible text color) and `src/components/LabelChip.tsx` draws a label.
+- `src/components/LabelsSelector.tsx` sits left of `SharedWithSelector`: the board's labels, which every member can add, edit, and delete. Each color is used once per board. `src/lib/labels.ts` holds the palette (key, hex, and legible text color) and `src/components/LabelChip.tsx` draws labels. After a label change, `BoardsView` bumps `labelsVersion` so `KanbanBoard` reloads the board without its loading screen.
 - `src/components/MarkdownContent.tsx` renders card descriptions. Descriptions are stored as Markdown, never HTML, and rendered without raw HTML.
 - `src/lib/kanban.ts` defines `Card`, `Column`, and `BoardData`, provides `initialData`, and contains the pure `moveCard`, `createId`, and `visibleColumns`/`isHiddenColumn` helpers.
 - `src/lib/api.ts` contains the same-origin API client for authenticated board reads and mutations.

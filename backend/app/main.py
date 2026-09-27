@@ -75,6 +75,7 @@ class CardCreateRequest(BaseModel):
     columnId: str
     title: str = Field(max_length=CARD_TITLE_MAX_LENGTH)
     details: str = Field(default="", max_length=CARD_DETAILS_MAX_LENGTH)
+    labelIds: list[str] = Field(default_factory=list)
 
 
 class CardUpdateRequest(BaseModel):
@@ -82,6 +83,8 @@ class CardUpdateRequest(BaseModel):
     details: str | None = Field(default=None, max_length=CARD_DETAILS_MAX_LENGTH)
     # The card's status is its column: a different one moves the card to its end.
     columnId: str | None = None
+    # The card's labels, replacing the ones it has; None leaves them as they are.
+    labelIds: list[str] | None = None
 
 
 class CardMoveRequest(BaseModel):
@@ -476,7 +479,9 @@ def add_board_card(
         raise HTTPException(status_code=422, detail="Card title is required")
     card_id = token_urlsafe(12)
     try:
-        board_id = database.create_card(username, card_id, payload.columnId, title, payload.details.strip())
+        board_id = database.create_card(
+            username, card_id, payload.columnId, title, payload.details.strip(), payload.labelIds
+        )
     except ValueError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
     return database.get_board(username, board_id)
@@ -493,7 +498,9 @@ def edit_board_card(
     if not title:
         raise HTTPException(status_code=422, detail="Card title is required")
     try:
-        board_id = database.update_card(username, card_id, title, payload.details, payload.columnId)
+        board_id = database.update_card(
+            username, card_id, title, payload.details, payload.columnId, payload.labelIds
+        )
     except ValueError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
     return database.get_board(username, board_id)

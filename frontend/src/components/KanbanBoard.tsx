@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   DndContext,
   DragOverlay,
@@ -34,6 +34,7 @@ import {
   visibleColumns,
   type BoardData,
 } from '@/lib/kanban'
+import { labelsOf } from '@/lib/labels'
 
 // Which card dialog is open: a new card for a column, or an existing card.
 type CardDialogState =
@@ -45,11 +46,14 @@ export const KanbanBoard = ({
   remote = false,
   boardId,
   onBoardLoaded,
+  labelsVersion = 0,
 }: {
   onLogout?: () => void
   remote?: boolean
   boardId?: string
   onBoardLoaded?: (board: BoardData) => void
+  // Bumped after the board's labels change in the header, to reload the board.
+  labelsVersion?: number
 }) => {
   const [board, setBoard] = useState<BoardData>(() => initialData)
   const [activeCardId, setActiveCardId] = useState<string | null>(null)
@@ -79,6 +83,26 @@ export const KanbanBoard = ({
   useEffect(() => {
     onBoardLoaded?.(board)
   }, [board, onBoardLoaded])
+
+  // Pick up label changes made in the header, without the loading screen. The
+  // version seen at mount is skipped: that board was just loaded.
+  const seenLabelsVersion = useRef(labelsVersion)
+  useEffect(() => {
+    if (!remote || labelsVersion === seenLabelsVersion.current) {
+      return
+    }
+    seenLabelsVersion.current = labelsVersion
+    const load = boardId ? getBoardById(boardId) : getBoard()
+    void load
+      .then((nextBoard) => setBoard(nextBoard))
+      .catch((requestError: { status?: number }) => {
+        if (requestError.status === 401) {
+          onLogout?.()
+          return
+        }
+        setError('Unable to load the board. Please try again.')
+      })
+  }, [onLogout, remote, boardId, labelsVersion])
 
   const applyRemoteChange = async (change: () => Promise<BoardData>) => {
     try {
@@ -155,9 +179,14 @@ export const KanbanBoard = ({
     }))
   }
 
-  const handleAddCard = (columnId: string, title: string, details: string) => {
+  const handleAddCard = (
+    columnId: string,
+    title: string,
+    details: string,
+    labelIds: string[],
+  ) => {
     if (remote) {
-      void applyRemoteChange(() => addCard(columnId, title, details))
+      void applyRemoteChange(() => addCard(columnId, title, details, labelIds))
       return
     }
     const id = createId('card')
@@ -165,7 +194,7 @@ export const KanbanBoard = ({
       ...prev,
       cards: {
         ...prev.cards,
-        [id]: { id, title, details: details || 'No details yet.' },
+        [id]: { id, title, details: details || 'No details yet.', labelIds },
       },
       columns: prev.columns.map((column) =>
         column.id === columnId
@@ -175,9 +204,15 @@ export const KanbanBoard = ({
     }))
   }
 
-  const handleEditCard = (cardId: string, title: string, details: string, columnId: string) => {
+  const handleEditCard = (
+    cardId: string,
+    title: string,
+    details: string,
+    columnId: string,
+    labelIds: string[],
+  ) => {
     if (remote) {
-      void applyRemoteChange(() => editCard(cardId, title, details, columnId))
+      void applyRemoteChange(() => editCard(cardId, title, details, columnId, labelIds))
       return
     }
     setBoard((prev) => ({
@@ -188,6 +223,7 @@ export const KanbanBoard = ({
           ...prev.cards[cardId],
           title,
           details: details || 'No details yet.',
+          labelIds,
         },
       },
       // Like the server: a new status moves the card to the end of that column.
@@ -231,6 +267,7 @@ export const KanbanBoard = ({
   }
 
   const activeCard = activeCardId ? cardsById[activeCardId] : null
+  const labels = board.labels ?? []
   const dialogCard =
     cardDialog && cardDialog.mode !== 'create' ? board.cards[cardDialog.cardId] : undefined
   // The dialog's status: the column a new card goes to, or the card's column.
@@ -239,14 +276,19 @@ export const KanbanBoard = ({
       ? cardDialog.columnId
       : dialogCard && findColumnId(board.columns, dialogCard.id)
 
-  const handleSaveCardDialog = (title: string, details: string, columnId: string) => {
+  const handleSaveCardDialog = (
+    title: string,
+    details: string,
+    columnId: string,
+    labelIds: string[],
+  ) => {
     if (!cardDialog) {
       return
     }
     if (cardDialog.mode === 'create') {
-      handleAddCard(columnId, title, details)
+      handleAddCard(columnId, title, details, labelIds)
     } else {
-      handleEditCard(cardDialog.cardId, title, details, columnId)
+      handleEditCard(cardDialog.cardId, title, details, columnId, labelIds)
     }
   }
 
@@ -279,6 +321,7 @@ export const KanbanBoard = ({
               key={column.id}
               column={column}
               cards={column.cardIds.map((cardId) => board.cards[cardId])}
+              labels={labels}
               onRename={handleRenameColumn}
               onAddCard={(columnId) => setCardDialog({ mode: 'create', columnId })}
               onViewCard={(cardId) => setCardDialog({ mode: 'view', cardId })}
@@ -292,7 +335,7 @@ export const KanbanBoard = ({
         <DragOverlay>
           {activeCard ? (
             <div className='w-[260px]'>
-              <KanbanCardPreview card={activeCard} />
+              <KanbanCardPreview card={activeCard} labels={labelsOf(labels, activeCard.labelIds)} />
             </div>
           ) : null}
         </DragOverlay>
@@ -305,6 +348,7 @@ export const KanbanBoard = ({
           card={dialogCard}
           columns={visibleColumns(board.columns)}
           initialColumnId={dialogColumnId}
+          labels={labels}
           onSave={handleSaveCardDialog}
           onClose={() => setCardDialog(null)}
         />

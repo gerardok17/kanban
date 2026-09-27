@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { BoardsView } from '@/components/BoardsView'
 import {
@@ -6,8 +6,10 @@ import {
   listBoardMembers,
   listBoards,
   listLabels,
+  updateLabel,
   type BoardSummary,
 } from '@/lib/api'
+import type { Label } from '@/lib/labels'
 
 vi.mock('@/lib/api', () => ({
   listBoards: vi.fn(),
@@ -71,6 +73,38 @@ describe('BoardsView with shared boards', () => {
 
     expect(await screen.findByRole('button', { name: /^Theirs/ })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Delete Board' })).not.toBeInTheDocument()
+  })
+
+  it("shows each card's labels and follows label changes made in the header", async () => {
+    const bug: Label = { id: 'label-bug', name: 'Bug', color: 'red', cardCount: 1 }
+    const boardWith = (label: Label) => ({
+      id: 'board-mine',
+      title: 'Mine',
+      columns: [{ id: 'board-mine-col-backlog', title: 'Backlog', cardIds: ['card-1'] }],
+      cards: { 'card-1': { id: 'card-1', title: 'Fix login', details: '', labelIds: [label.id] } },
+      labels: [label],
+      completed: [],
+    })
+    const defect = { ...bug, name: 'Defect' }
+    vi.mocked(getBoardById).mockResolvedValueOnce(boardWith(bug)).mockResolvedValueOnce(boardWith(defect))
+    vi.mocked(listLabels).mockResolvedValue([bug])
+    vi.mocked(updateLabel).mockResolvedValue([defect])
+    render(<BoardsView remote />)
+
+    const card = await screen.findByTestId('card-card-1')
+    expect(within(card).getByText('Bug')).toBeInTheDocument()
+    const loads = vi.mocked(getBoardById).mock.calls.length
+
+    // Renaming the label in the header reloads the board, and the chip follows.
+    await userEvent.click(screen.getByRole('button', { name: /^Labels/ }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit label Bug' }))
+    const name = screen.getByLabelText('Label name')
+    await userEvent.clear(name)
+    await userEvent.type(name, 'Defect')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(await within(card).findByText('Defect')).toBeInTheDocument()
+    expect(vi.mocked(getBoardById).mock.calls.length).toBe(loads + 1)
   })
 
   it('marks boards shared with you in the board list', async () => {

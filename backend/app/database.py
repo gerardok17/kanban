@@ -855,10 +855,22 @@ def _read_board(connection: Connection, board_id: str) -> dict[str, Any]:
         "SELECT column_id, card_id, position FROM card_positions WHERE board_id = %s ORDER BY position",
         (board_id,),
     )
+    card_labels = _all(
+        connection,
+        """
+        SELECT card_labels.card_id, card_labels.label_id FROM card_labels
+        JOIN cards ON cards.id = card_labels.card_id
+        WHERE cards.board_id = %s AND cards.completed_at IS NULL
+        """,
+        (board_id,),
+    )
 
     card_ids_by_column: dict[str, list[str]] = {column["id"]: [] for column in columns}
     for position in positions:
         card_ids_by_column[position["column_id"]].append(position["card_id"])
+    label_ids_by_card: dict[str, list[str]] = {card["id"]: [] for card in cards}
+    for card_label in card_labels:
+        label_ids_by_card[card_label["card_id"]].append(card_label["label_id"])
 
     return {
         "id": board["id"],
@@ -879,9 +891,11 @@ def _read_board(connection: Connection, board_id: str) -> dict[str, Any]:
                 # The creator's email; None once that user is deleted.
                 "createdBy": card["created_by"],
                 "createdAt": iso_utc(card["created_at"]),
+                "labelIds": label_ids_by_card[card["id"]],
             }
             for card in cards
         },
+        "labels": _board_labels(connection, board_id),
         "completed": [
             {
                 "id": card["id"],
@@ -912,8 +926,35 @@ def rename_column(username: str, column_id: str, title: str) -> str:
     return board_id
 
 
+def _set_card_labels(
+    connection: Connection, board_id: str, card_id: str, label_ids: list[str]
+) -> None:
+    """Replace a card's labels; each one must be a label of the card's board."""
+    wanted = set(label_ids)
+    if wanted:
+        placeholders = ", ".join(["%s"] * len(wanted))
+        found = _one(
+            connection,
+            f"SELECT COUNT(*) AS count FROM labels WHERE board_id = %s AND id IN ({placeholders})",
+            (board_id, *wanted),
+        )["count"]
+        if found != len(wanted):
+            raise ValueError("Label not found")
+    _exec(connection, "DELETE FROM card_labels WHERE card_id = %s", (card_id,))
+    with connection.cursor() as cursor:
+        cursor.executemany(
+            "INSERT INTO card_labels(card_id, label_id) VALUES (%s, %s)",
+            [(card_id, label_id) for label_id in wanted],
+        )
+
+
 def create_card(
-    username: str, card_id: str, column_id: str, title: str, details: str
+    username: str,
+    card_id: str,
+    column_id: str,
+    title: str,
+    details: str,
+    label_ids: list[str] | None = None,
 ) -> str:
     with connect() as connection:
         board_id = _board_id_for_column(connection, username, column_id)
@@ -941,6 +982,8 @@ def create_card(
             "INSERT INTO card_positions(board_id, column_id, card_id, position) VALUES (%s, %s, %s, %s)",
             (board_id, column_id, card_id, next_position),
         )
+        if label_ids:
+            _set_card_labels(connection, board_id, card_id, label_ids)
         _exec(
             connection,
             "UPDATE boards SET updated_at = %s WHERE id = %s",
@@ -950,7 +993,12 @@ def create_card(
 
 
 def update_card(
-    username: str, card_id: str, title: str, details: str | None, column_id: str | None = None
+    username: str,
+    card_id: str,
+    title: str,
+    details: str | None,
+    column_id: str | None = None,
+    label_ids: list[str] | None = None,
 ) -> str:
     with connect() as connection:
         board_id = _board_id_for_card(connection, username, card_id)
@@ -967,6 +1015,9 @@ def update_card(
             )
             if current is None or current["column_id"] != column_id:
                 _place_card(connection, board_id, card_id, column_id)
+        # None keeps the card's labels; a list replaces them.
+        if label_ids is not None:
+            _set_card_labels(connection, board_id, card_id, label_ids)
         _exec(
             connection,
             "UPDATE boards SET updated_at = %s WHERE id = %s",

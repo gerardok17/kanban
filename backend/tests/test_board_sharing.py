@@ -344,3 +344,52 @@ def test_deleting_a_label_takes_it_off_its_cards() -> None:
     with database.connect() as connection, connection.cursor() as cursor:
         cursor.execute("SELECT COUNT(*) AS count FROM card_labels WHERE card_id = %s", (card_id,))
         assert cursor.fetchone()["count"] == 0
+
+
+def card_label_names(board: dict, title: str) -> list[str]:
+    names = {label["id"]: label["name"] for label in board["labels"]}
+    card = next(card for card in board["cards"].values() if card["title"] == title)
+    return sorted(names[label_id] for label_id in card["labelIds"])
+
+
+def test_cards_carry_labels_of_their_board() -> None:
+    owner, member = make_user("owner"), make_user("member")
+    board_id = own_board(owner)
+    client.post(f"/api/boards/{board_id}/members", json={"email": member})
+    client.post(labels_url(board_id), json={"name": "Bug", "color": "red"})
+    labels = client.post(labels_url(board_id), json={"name": "Feature", "color": "blue"}).json()
+    bug, feature = (next(label for label in labels if label["name"] == name) for name in ("Bug", "Feature"))
+
+    # The board brings its labels in palette order; a member creates a labelled card.
+    as_user(member)
+    new_card = {"columnId": f"{board_id}-col-backlog", "title": "Login", "labelIds": [bug["id"]]}
+    board = client.post("/api/board/cards", json=new_card).json()
+    assert [label["name"] for label in board["labels"]] == ["Feature", "Bug"]
+    assert card_label_names(board, "Login") == ["Bug"]
+    card_id = next(card["id"] for card in board["cards"].values() if card["title"] == "Login")
+
+    # An edit with labelIds replaces them; one without keeps them.
+    both = {"title": "Login", "labelIds": [bug["id"], feature["id"]]}
+    assert card_label_names(client.patch(f"/api/board/cards/{card_id}", json=both).json(), "Login") == [
+        "Bug",
+        "Feature",
+    ]
+    board = client.patch(f"/api/board/cards/{card_id}", json={"title": "Login v2"}).json()
+    assert card_label_names(board, "Login v2") == ["Bug", "Feature"]
+
+    # A label of another board is rejected, and nothing is saved.
+    other_id = own_board(make_user("other"))
+    [foreign] = client.post(labels_url(other_id), json={"name": "Foreign", "color": "red"}).json()
+    as_user(member)
+    sneaky = {"title": "Sneaky", "labelIds": [foreign["id"]]}
+    assert client.patch(f"/api/board/cards/{card_id}", json=sneaky).status_code == 404
+    sneaky_card = {**new_card, "title": "Sneaky", "labelIds": [foreign["id"]]}
+    assert client.post("/api/board/cards", json=sneaky_card).status_code == 404
+    board = client.get(f"/api/boards/{board_id}").json()
+    assert [card["title"] for card in board["cards"].values()] == ["Login v2"]
+    assert card_label_names(board, "Login v2") == ["Bug", "Feature"]
+
+    # Deleting a label takes it off the card.
+    client.delete(f"{labels_url(board_id)}/{bug['id']}")
+    board = client.get(f"/api/boards/{board_id}").json()
+    assert card_label_names(board, "Login v2") == ["Feature"]
