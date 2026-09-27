@@ -56,7 +56,8 @@ if google_enabled:
         client_id=GOOGLE_CLIENT_ID,
         client_secret=GOOGLE_CLIENT_SECRET,
         server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
-        client_kwargs={"scope": "openid email profile"},
+        # Only the email: it is all the app keeps, and the login page says so.
+        client_kwargs={"scope": "openid email"},
     )
 
 
