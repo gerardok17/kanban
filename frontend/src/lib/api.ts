@@ -21,7 +21,7 @@ const request = async <T>(path: string, options?: RequestInit): Promise<T> => {
 };
 
 export const getSession = () =>
-  request<{ username: string; email: string | null }>("/api/auth/session");
+  request<{ username: string; email: string | null; role: Role | null }>("/api/auth/session");
 
 export const getBoard = () => request<BoardData>("/api/board");
 
@@ -87,22 +87,33 @@ export const createBoard = (title: string) =>
 export const deleteBoard = (boardId: string) =>
   request<BoardSummary[]>(`/api/boards/${boardId}`, { method: "DELETE" });
 
+// App-level roles: admins manage users; users only use their boards.
+export type Role = "admin" | "user";
+
 export type User = {
   id: string;
   username: string;
   email: string | null;
+  role: Role;
   created_at: string | null;
 };
 
 export const listUsers = (signal?: AbortSignal) =>
   request<User[]>("/api/users", { signal });
 
-// Create and delete return the refreshed user list. Users are added by email
-// (the Google sign-in allowlist); no password is stored.
-export const createUser = (email: string) =>
+// User administration is admin-only. Create, role change, and delete return the
+// refreshed user list. Users are added by email (the Google sign-in allowlist);
+// no password is stored.
+export const createUser = (email: string, role: Role) =>
   request<User[]>("/api/users", {
     method: "POST",
-    body: JSON.stringify({ email }),
+    body: JSON.stringify({ email, role }),
+  });
+
+export const updateUserRole = (userId: string, role: Role) =>
+  request<User[]>(`/api/users/${userId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ role }),
   });
 
 export const deleteUser = (userId: string) =>

@@ -1,9 +1,18 @@
 'use client'
 
-import { FormEvent, useEffect, useState } from 'react'
-import { createPortal } from 'react-dom'
+import { useEffect, useState } from 'react'
+import { AddUserDialog } from '@/components/AddUserDialog'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
-import { createUser, deleteUser, listUsers, type User } from '@/lib/api'
+import {
+  createUser,
+  deleteUser,
+  listUsers,
+  updateUserRole,
+  type Role,
+  type User,
+} from '@/lib/api'
+
+// Admin-only: AppShell shows this view to admins, and the API enforces it.
 
 export const UsersView = ({ remote = false }: { remote?: boolean }) => {
   const [users, setUsers] = useState<User[]>([])
@@ -11,9 +20,6 @@ export const UsersView = ({ remote = false }: { remote?: boolean }) => {
   const [error, setError] = useState('')
   const [userToDelete, setUserToDelete] = useState<User | null>(null)
   const [showCreate, setShowCreate] = useState(false)
-  const [form, setForm] = useState({ email: '' })
-  const [createError, setCreateError] = useState('')
-  const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
     if (!remote) {
@@ -45,33 +51,18 @@ export const UsersView = ({ remote = false }: { remote?: boolean }) => {
     }
   }
 
-  const openCreate = () => {
-    setForm({ email: '' })
-    setCreateError('')
-    setShowCreate(true)
+  const handleRoleChange = async (user: User, role: Role) => {
+    try {
+      setUsers(await updateUserRole(user.id, role))
+      setError('')
+    } catch {
+      setError('Unable to change that role.')
+    }
   }
 
-  const handleCreate = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    const email = form.email.trim()
-    if (!email || !email.includes('@')) {
-      setCreateError('A valid email is required.')
-      return
-    }
-    setSubmitting(true)
-    try {
-      const next = await createUser(email)
-      setUsers(next)
-      setShowCreate(false)
-    } catch (requestError) {
-      setCreateError(
-        (requestError as { status?: number }).status === 409
-          ? 'That email already exists.'
-          : 'Unable to add that email.',
-      )
-    } finally {
-      setSubmitting(false)
-    }
+  const handleCreate = async (email: string, role: Role) => {
+    setUsers(await createUser(email, role))
+    setError('')
   }
 
   return (
@@ -81,10 +72,10 @@ export const UsersView = ({ remote = false }: { remote?: boolean }) => {
         {remote ? (
           <button
             type='button'
-            onClick={openCreate}
+            onClick={() => setShowCreate(true)}
             className='rounded-full bg-[var(--secondary-purple)] px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110'
           >
-            Add email
+            Add user
           </button>
         ) : null}
       </div>
@@ -103,6 +94,7 @@ export const UsersView = ({ remote = false }: { remote?: boolean }) => {
             <tr>
               <th>ID</th>
               <th>Email</th>
+              <th>Role</th>
               <th>Created</th>
               <th>Action</th>
             </tr>
@@ -112,6 +104,21 @@ export const UsersView = ({ remote = false }: { remote?: boolean }) => {
               <tr key={user.id}>
                 <td>{index + 1}</td>
                 <td>{user.email ?? user.username}</td>
+                <td>
+                  {/* The first user is the owner: always an admin. */}
+                  <select
+                    value={user.role}
+                    onChange={(event) =>
+                      void handleRoleChange(user, event.target.value as Role)
+                    }
+                    disabled={index === 0}
+                    aria-label={`Role for ${user.email ?? user.username}`}
+                    className='rounded-lg border border-[var(--stroke)] bg-white px-2 py-1 text-sm text-[var(--navy-dark)] outline-none transition focus:border-[var(--primary-blue)] disabled:cursor-not-allowed disabled:opacity-60'
+                  >
+                    <option value='user'>User</option>
+                    <option value='admin'>Admin</option>
+                  </select>
+                </td>
                 <td>
                   {user.created_at
                     ? new Date(user.created_at).toLocaleString()
@@ -151,63 +158,9 @@ export const UsersView = ({ remote = false }: { remote?: boolean }) => {
         onCancel={() => setUserToDelete(null)}
       />
 
-      {showCreate && typeof document !== 'undefined'
-        ? createPortal(
-            <div
-              className='fixed inset-0 z-[100] flex items-center justify-center bg-black/15 p-4 backdrop-blur-sm'
-              role='dialog'
-              aria-modal='true'
-              onClick={() => setShowCreate(false)}
-            >
-              <div
-                className='w-full max-w-sm rounded-xl border border-[var(--card-border-light)] bg-[var(--card-white)] p-6 shadow-[0_20px_48px_rgba(3,33,71,0.4)]'
-                onClick={(event) => event.stopPropagation()}
-              >
-                <h3 className='font-display text-lg font-semibold text-[var(--navy-dark)]'>
-                  Add allowed email
-                </h3>
-                {createError ? (
-                  <p className='mt-2 text-sm font-semibold text-[var(--accent-red)]'>
-                    {createError}
-                  </p>
-                ) : null}
-                <form onSubmit={handleCreate} className='login-form mt-4'>
-                  <label>
-                    Email
-                    <input
-                      type='email'
-                      value={form.email}
-                      onChange={(event) =>
-                        setForm((prev) => ({ ...prev, email: event.target.value }))
-                      }
-                      placeholder='name@example.com'
-                      autoComplete='off'
-                      required
-                      autoFocus
-                    />
-                  </label>
-                  <div className='mt-2 flex justify-end gap-3'>
-                    <button
-                      type='button'
-                      onClick={() => setShowCreate(false)}
-                      className='rounded-full border border-[var(--stroke)] px-4 py-2 text-sm font-semibold text-black/70 transition hover:border-[var(--primary-blue)] hover:text-black'
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type='submit'
-                      disabled={submitting}
-                      className='rounded-full bg-[var(--secondary-purple)] px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-60'
-                    >
-                      {submitting ? 'Adding...' : 'Add'}
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </div>,
-            document.body,
-          )
-        : null}
+      {showCreate ? (
+        <AddUserDialog onAdd={handleCreate} onClose={() => setShowCreate(false)} />
+      ) : null}
     </div>
   )
 }
