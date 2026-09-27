@@ -4,6 +4,13 @@ import { CardDialog } from '@/components/CardDialog'
 import { CARD_TITLE_MAX_LENGTH } from '@/lib/cardEditor'
 
 const card = { id: 'card-1', title: 'Existing card', details: 'Some **notes**' }
+const createdCard = {
+  ...card,
+  createdBy: 'alex@example.com',
+  // Local 09:17 of the current year, so the expected text holds in any time
+  // zone and any year (another year would add it to the date).
+  createdAt: new Date(new Date().getFullYear(), 8, 17, 9, 17).toISOString(),
+}
 
 describe('CardDialog', () => {
   it('disables saving until the card has a title', async () => {
@@ -67,6 +74,34 @@ describe('CardDialog', () => {
 
     await userEvent.keyboard('{Escape}')
     expect(onClose).toHaveBeenCalled()
+  })
+
+  it('shows who created the card and when, in view and edit mode', async () => {
+    render(<CardDialog initialMode='view' card={createdCard} onSave={vi.fn()} onClose={vi.fn()} />)
+    expect(screen.getByText(/^Created by/)).toHaveTextContent('Created by alex @ Sept 17th 09:17.')
+    expect(screen.getByText('alex')).toHaveAttribute('title', 'alex@example.com')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    expect(screen.getByLabelText('Card title')).toBeInTheDocument()
+    expect(screen.getByText(/^Created by/)).toHaveTextContent('Created by alex @ Sept 17th 09:17.')
+  })
+
+  it('names a deleted creator, and shows no creator for a new card', () => {
+    const { unmount } = render(
+      <CardDialog
+        initialMode='view'
+        card={{ ...createdCard, createdBy: null }}
+        onSave={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    )
+    expect(screen.getByText(/^Created by/)).toHaveTextContent(
+      'Created by a deleted user @ Sept 17th 09:17.',
+    )
+    unmount()
+
+    render(<CardDialog initialMode='create' onSave={vi.fn()} onClose={vi.fn()} />)
+    expect(screen.queryByText(/^Created by/)).not.toBeInTheDocument()
   })
 
   it('closes from the Close button in view mode', async () => {

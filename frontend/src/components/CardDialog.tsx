@@ -7,6 +7,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { MarkdownContent } from '@/components/MarkdownContent'
 import { RichTextEditor } from '@/components/RichTextEditor'
 import { CARD_DETAILS_MAX_LENGTH, CARD_TITLE_MAX_LENGTH } from '@/lib/cardEditor'
+import { formatDateTime } from '@/lib/dates'
 import type { Card } from '@/lib/kanban'
 
 export type CardDialogMode = 'create' | 'view' | 'edit'
@@ -31,6 +32,25 @@ const Counter = ({ length, max }: CounterProps) => (
     {length}/{max}
   </span>
 )
+
+// "Created by alex @ Sept 17th 09:17." — the email without its domain (the full
+// one on hover), in local time. Nothing for a card not created yet.
+const CreatedLine = ({ card }: { card?: Card }) => {
+  if (!card?.createdAt) {
+    return null
+  }
+  return (
+    <p className='text-xs text-[var(--gray-text)]'>
+      Created by{' '}
+      {card.createdBy ? (
+        <span title={card.createdBy}>{card.createdBy.split('@')[0]}</span>
+      ) : (
+        'a deleted user'
+      )}{' '}
+      @ {formatDateTime(card.createdAt)}.
+    </p>
+  )
+}
 
 // The card's own place: create it, read it in full, or edit it. Labels and
 // per-card messages are meant to live here too.
@@ -157,14 +177,15 @@ export const CardDialog = ({ initialMode, card, onSave, onClose }: CardDialogPro
                 onChange={setDetails}
                 ariaLabel='Card details'
               />
-              <div className='mt-1 flex justify-end'>
+              <div className='mt-1 flex justify-end gap-3'>
+                <span className='mr-auto hidden text-xs text-black/40 sm:inline'>
+                  Esc to close · ⌘/Ctrl+Enter to save
+                </span>
                 <Counter length={details.length} max={CARD_DETAILS_MAX_LENGTH} />
               </div>
             </div>
-            <div className='flex items-center justify-between gap-3'>
-              <span className='hidden text-xs text-black/40 sm:inline'>
-                Esc to close · ⌘/Ctrl+Enter to save
-              </span>
+            <div className='flex flex-wrap items-center justify-between gap-x-3 gap-y-2'>
+              <CreatedLine card={card} />
               <div className='ml-auto flex gap-2'>
                 <button
                   type='button'
@@ -197,22 +218,25 @@ export const CardDialog = ({ initialMode, card, onSave, onClose }: CardDialogPro
                 <p className='text-sm text-black/40'>No description.</p>
               )}
             </div>
-            <div className='flex justify-end gap-2'>
-              <button
-                type='button'
-                onClick={onClose}
-                className='rounded-full border border-[var(--stroke)] px-4 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--gray-text)] transition hover:text-[var(--navy-dark)]'
-              >
-                Close
-              </button>
-              <button
-                type='button'
-                onClick={() => setMode('edit')}
-                autoFocus
-                className='rounded-full bg-[var(--secondary-purple)] px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white transition hover:brightness-110'
-              >
-                Edit
-              </button>
+            <div className='flex flex-wrap items-center justify-between gap-x-3 gap-y-2'>
+              <CreatedLine card={card} />
+              <div className='ml-auto flex gap-2'>
+                <button
+                  type='button'
+                  onClick={onClose}
+                  className='rounded-full border border-[var(--stroke)] px-4 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--gray-text)] transition hover:text-[var(--navy-dark)]'
+                >
+                  Close
+                </button>
+                <button
+                  type='button'
+                  onClick={() => setMode('edit')}
+                  autoFocus
+                  className='rounded-full bg-[var(--secondary-purple)] px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white transition hover:brightness-110'
+                >
+                  Edit
+                </button>
+              </div>
             </div>
           </div>
         )}

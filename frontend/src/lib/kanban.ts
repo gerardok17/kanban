@@ -2,6 +2,10 @@ export type Card = {
   id: string;
   title: string;
   details: string;
+  // Set by the server (demo cards have neither): the creator's email, null once
+  // that user is deleted, and when the card was created.
+  createdBy?: string | null;
+  createdAt?: string;
 };
 
 export type Column = {
