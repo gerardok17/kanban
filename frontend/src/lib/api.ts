@@ -43,10 +43,11 @@ export const addCard = (columnId: string, title: string, details: string) =>
     body: JSON.stringify({ columnId, title, details }),
   });
 
-export const editCard = (cardId: string, title: string, details: string) =>
+// `columnId` is the card's status: a different column moves the card to its end.
+export const editCard = (cardId: string, title: string, details: string, columnId: string) =>
   request<BoardData>(`/api/board/cards/${cardId}`, {
     method: "PATCH",
-    body: JSON.stringify({ title, details }),
+    body: JSON.stringify({ title, details, columnId }),
   });
 
 export const deleteCard = (cardId: string) =>

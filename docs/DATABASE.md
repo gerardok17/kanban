@@ -93,7 +93,9 @@ shape as `GET /api/board`.
 - `GET /api/board` reads the signed-in user's board.
 - `PATCH /api/board/columns/{column_id}` accepts `{ "title": "..." }`.
 - `POST /api/board/cards` accepts `{ "columnId": "...", "title": "...", "details": "..." }`.
-- `PATCH /api/board/cards/{card_id}` accepts `{ "title": "...", "details": "..." }`.
+- `PATCH /api/board/cards/{card_id}` accepts `{ "title": "...", "details": "...", "columnId": "..." }`;
+  the optional `columnId` is the card's status, and a different column moves the card to its end
+  in the same transaction.
 - `DELETE /api/board/cards/{card_id}` removes a card and normalizes positions.
 - `POST /api/board/cards/{card_id}/move` accepts `{ "columnId": "...", "position": 0 }`.
 

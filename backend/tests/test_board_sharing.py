@@ -75,6 +75,11 @@ def card_creators(board_id: str) -> dict[str, str | None]:
     return {card["title"]: card["createdBy"] for card in cards}
 
 
+def column_titles(board: dict, column_id: str) -> list[str]:
+    column = next(column for column in board["columns"] if column["id"] == column_id)
+    return [board["cards"][card_id]["title"] for card_id in column["cardIds"]]
+
+
 def run_sql(sql: str, params: tuple = ()) -> None:
     with database.connect() as connection, connection.cursor() as cursor:
         cursor.execute(sql, params)
@@ -238,3 +243,28 @@ def test_the_v6_backfill_runs_only_once() -> None:
     run_sql("DELETE FROM schema_migrations WHERE version = 6")
     database.initialize_database()
     assert card_creators(board_id)["From before v6"] == owner
+
+
+def test_editing_a_card_can_change_its_status() -> None:
+    owner = make_user("owner")
+    board_id = own_board(owner)
+    progress = f"{board_id}-col-progress"
+    first, second = add_card(board_id, "First"), add_card(board_id, "Second")
+    client.post(f"/api/board/cards/{second}/move", json={"columnId": progress, "position": 0})
+
+    # A new status moves the card to the end of that column, along with the edit.
+    edit = {"title": "First, moved", "columnId": progress}
+    board = client.patch(f"/api/board/cards/{first}", json=edit).json()
+    assert column_titles(board, progress) == ["Second", "First, moved"]
+
+    # Its current status keeps the card where it is.
+    board = client.patch(f"/api/board/cards/{second}", json={"title": "Second", "columnId": progress}).json()
+    assert column_titles(board, progress) == ["Second", "First, moved"]
+
+    # A column of another board is rejected, and nothing is saved, not even the title.
+    other_column = f"{own_board(make_user('other'))}-col-progress"
+    as_user(owner)
+    sneaky = {"title": "Sneaky", "columnId": other_column}
+    assert client.patch(f"/api/board/cards/{first}", json=sneaky).status_code == 404
+    board = client.get(f"/api/boards/{board_id}").json()
+    assert column_titles(board, progress) == ["Second", "First, moved"]

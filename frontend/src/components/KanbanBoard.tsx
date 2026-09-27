@@ -27,6 +27,7 @@ import {
 } from '@/lib/api'
 import {
   createId,
+  findColumnId,
   initialData,
   isDoneColumn,
   moveCard,
@@ -174,9 +175,9 @@ export const KanbanBoard = ({
     }))
   }
 
-  const handleEditCard = (cardId: string, title: string, details: string) => {
+  const handleEditCard = (cardId: string, title: string, details: string, columnId: string) => {
     if (remote) {
-      void applyRemoteChange(() => editCard(cardId, title, details))
+      void applyRemoteChange(() => editCard(cardId, title, details, columnId))
       return
     }
     setBoard((prev) => ({
@@ -189,6 +190,11 @@ export const KanbanBoard = ({
           details: details || 'No details yet.',
         },
       },
+      // Like the server: a new status moves the card to the end of that column.
+      columns:
+        findColumnId(prev.columns, cardId) === columnId
+          ? prev.columns
+          : moveCard(prev.columns, cardId, columnId),
     }))
   }
 
@@ -227,15 +233,20 @@ export const KanbanBoard = ({
   const activeCard = activeCardId ? cardsById[activeCardId] : null
   const dialogCard =
     cardDialog && cardDialog.mode !== 'create' ? board.cards[cardDialog.cardId] : undefined
+  // The dialog's status: the column a new card goes to, or the card's column.
+  const dialogColumnId =
+    cardDialog?.mode === 'create'
+      ? cardDialog.columnId
+      : dialogCard && findColumnId(board.columns, dialogCard.id)
 
-  const handleSaveCardDialog = (title: string, details: string) => {
+  const handleSaveCardDialog = (title: string, details: string, columnId: string) => {
     if (!cardDialog) {
       return
     }
     if (cardDialog.mode === 'create') {
-      handleAddCard(cardDialog.columnId, title, details)
+      handleAddCard(columnId, title, details)
     } else {
-      handleEditCard(cardDialog.cardId, title, details)
+      handleEditCard(cardDialog.cardId, title, details, columnId)
     }
   }
 
@@ -287,11 +298,13 @@ export const KanbanBoard = ({
         </DragOverlay>
       </DndContext>
 
-      {cardDialog && (cardDialog.mode === 'create' || dialogCard) ? (
+      {cardDialog && dialogColumnId ? (
         <CardDialog
           key={cardDialog.mode === 'create' ? `new-${cardDialog.columnId}` : cardDialog.cardId}
           initialMode={cardDialog.mode}
           card={dialogCard}
+          columns={visibleColumns(board.columns)}
+          initialColumnId={dialogColumnId}
           onSave={handleSaveCardDialog}
           onClose={() => setCardDialog(null)}
         />

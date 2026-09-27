@@ -64,4 +64,21 @@ describe("KanbanBoard", () => {
 
     expect(within(column).getByText("Roadmap themes v2")).toBeInTheDocument();
   });
+
+  it("moves a card to the end of another column by changing its status", async () => {
+    render(<KanbanBoard />);
+    const backlog = screen.getByTestId("column-col-backlog");
+    const progress = screen.getByTestId("column-col-progress");
+    await userEvent.click(
+      within(backlog).getByRole("button", { name: "Edit Align roadmap themes" }),
+    );
+
+    const edit = await screen.findByRole("dialog", { name: "Edit card" });
+    await userEvent.selectOptions(within(edit).getByLabelText("Status"), "In Progress");
+    await userEvent.click(within(edit).getByRole("button", { name: "Save" }));
+
+    expect(within(backlog).queryByText("Align roadmap themes")).not.toBeInTheDocument();
+    const titles = within(progress).getAllByRole("heading").map((heading) => heading.textContent);
+    expect(titles.at(-1)).toBe("Align roadmap themes");
+  });
 });
