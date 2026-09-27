@@ -268,3 +268,79 @@ def test_editing_a_card_can_change_its_status() -> None:
     assert client.patch(f"/api/board/cards/{first}", json=sneaky).status_code == 404
     board = client.get(f"/api/boards/{board_id}").json()
     assert column_titles(board, progress) == ["Second", "First, moved"]
+
+
+def labels_url(board_id: str) -> str:
+    return f"/api/boards/{board_id}/labels"
+
+
+def test_every_member_manages_the_board_labels() -> None:
+    owner, member, stranger = make_user("owner"), make_user("member"), make_user("stranger")
+    board_id = own_board(owner)
+    client.post(f"/api/boards/{board_id}/members", json={"email": member})
+
+    created = client.post(labels_url(board_id), json={"name": " Bug ", "color": "red"})
+    assert created.status_code == 201
+    [bug] = created.json()
+    assert (bug["name"], bug["color"], bug["cardCount"]) == ("Bug", "red", 0)
+
+    # A member who is not the owner adds, edits, and deletes labels too.
+    as_user(member)
+    client.post(labels_url(board_id), json={"name": "Feature", "color": "blue"})
+    recolor = {"name": "Bugfix", "color": "orange"}
+    labels = client.patch(f"{labels_url(board_id)}/{bug['id']}", json=recolor).json()
+    # Listed in palette order: blue before orange.
+    assert [(label["name"], label["color"]) for label in labels] == [
+        ("Feature", "blue"),
+        ("Bugfix", "orange"),
+    ]
+    remaining = client.delete(f"{labels_url(board_id)}/{bug['id']}").json()
+    assert [label["name"] for label in remaining] == ["Feature"]
+
+    # Someone who cannot open the board learns nothing about its labels.
+    as_user(stranger)
+    assert client.get(labels_url(board_id)).status_code == 404
+    sneaky = {"name": "Sneaky", "color": "green"}
+    assert client.post(labels_url(board_id), json=sneaky).status_code == 404
+
+
+def test_label_rules() -> None:
+    owner = make_user("owner")
+    board_id = own_board(owner)
+    url = labels_url(board_id)
+
+    assert client.post(url, json={"name": "x" * 17, "color": "red"}).status_code == 422
+    assert client.post(url, json={"name": "   ", "color": "red"}).status_code == 422
+    assert client.post(url, json={"name": "Teal", "color": "teal"}).status_code == 422
+    assert client.delete(f"{url}/label-unknown").status_code == 404
+
+    # Each color once per board, so eight labels at most; names may repeat.
+    for color in database.LABEL_COLORS:
+        assert client.post(url, json={"name": "Same", "color": color}).status_code == 201
+    ninth = client.post(url, json={"name": "Ninth", "color": "red"})
+    assert ninth.status_code == 422
+    assert ninth.json()["detail"] == "That color is already used on this board."
+
+    # Taking another label's color is refused; saving a label unchanged is fine.
+    red = next(label for label in client.get(url).json() if label["color"] == "red")
+    assert client.patch(f"{url}/{red['id']}", json={"name": "Red", "color": "blue"}).status_code == 422
+    assert client.patch(f"{url}/{red['id']}", json={"name": "Same", "color": "red"}).status_code == 200
+
+    # Another board's colors are its own.
+    other_id = client.post("/api/boards", json={"title": "Other"}).json()["id"]
+    assert client.post(labels_url(other_id), json={"name": "Bug", "color": "red"}).status_code == 201
+
+
+def test_deleting_a_label_takes_it_off_its_cards() -> None:
+    owner = make_user("owner")
+    board_id = own_board(owner)
+    card_id = add_card(board_id, "Labelled")
+    [label] = client.post(labels_url(board_id), json={"name": "Bug", "color": "red"}).json()
+    # The card dialog applies labels in a later change; attach this one directly.
+    run_sql("INSERT INTO card_labels(card_id, label_id) VALUES (%s, %s)", (card_id, label["id"]))
+    assert client.get(labels_url(board_id)).json()[0]["cardCount"] == 1
+
+    assert client.delete(f"{labels_url(board_id)}/{label['id']}").json() == []
+    with database.connect() as connection, connection.cursor() as cursor:
+        cursor.execute("SELECT COUNT(*) AS count FROM card_labels WHERE card_id = %s", (card_id,))
+        assert cursor.fetchone()["count"] == 0

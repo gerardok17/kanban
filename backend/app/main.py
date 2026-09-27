@@ -101,6 +101,17 @@ class BoardShareRequest(BaseModel):
     email: str
 
 
+# Label names show as chips on cards, so they stay short.
+LABEL_NAME_MAX_LENGTH = 16
+# Mirrors database.LABEL_COLORS.
+LabelColor = Literal["blue", "green", "yellow", "red", "gray", "purple", "pink", "orange"]
+
+
+class LabelRequest(BaseModel):
+    name: str = Field(max_length=LABEL_NAME_MAX_LENGTH)
+    color: LabelColor
+
+
 # App-level roles; mirrors database.USER_ROLES.
 UserRole = Literal["admin", "user"]
 
@@ -363,6 +374,70 @@ def unshare_board(
         return database.unshare_board(username, board_id, user_id)
     except database.OwnerOnlyError as error:
         raise HTTPException(status_code=403, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+# Labels: everyone who can open a board manages its labels. Each change returns
+# the refreshed list.
+@app.get("/api/boards/{board_id}/labels")
+def list_labels(
+    board_id: str,
+    session: str | None = Cookie(default=None),
+) -> list[dict]:
+    username = require_session(session)
+    try:
+        return database.list_labels(username, board_id)
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@app.post("/api/boards/{board_id}/labels", status_code=201)
+def create_label(
+    board_id: str,
+    payload: LabelRequest,
+    session: str | None = Cookie(default=None),
+) -> list[dict]:
+    username = require_session(session)
+    name = payload.name.strip()
+    if not name:
+        raise HTTPException(status_code=422, detail="Label name is required")
+    try:
+        return database.create_label(username, board_id, name, payload.color)
+    except database.LabelError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@app.patch("/api/boards/{board_id}/labels/{label_id}")
+def update_label(
+    board_id: str,
+    label_id: str,
+    payload: LabelRequest,
+    session: str | None = Cookie(default=None),
+) -> list[dict]:
+    username = require_session(session)
+    name = payload.name.strip()
+    if not name:
+        raise HTTPException(status_code=422, detail="Label name is required")
+    try:
+        return database.update_label(username, board_id, label_id, name, payload.color)
+    except database.LabelError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@app.delete("/api/boards/{board_id}/labels/{label_id}")
+def delete_label(
+    board_id: str,
+    label_id: str,
+    session: str | None = Cookie(default=None),
+) -> list[dict]:
+    username = require_session(session)
+    try:
+        return database.delete_label(username, board_id, label_id)
     except ValueError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
 

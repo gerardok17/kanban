@@ -1,7 +1,13 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { BoardsView } from '@/components/BoardsView'
-import { getBoardById, listBoardMembers, listBoards, type BoardSummary } from '@/lib/api'
+import {
+  getBoardById,
+  listBoardMembers,
+  listBoards,
+  listLabels,
+  type BoardSummary,
+} from '@/lib/api'
 
 vi.mock('@/lib/api', () => ({
   listBoards: vi.fn(),
@@ -11,6 +17,10 @@ vi.mock('@/lib/api', () => ({
   deleteBoard: vi.fn(),
   shareBoard: vi.fn(),
   unshareBoard: vi.fn(),
+  listLabels: vi.fn(),
+  createLabel: vi.fn(),
+  updateLabel: vi.fn(),
+  deleteLabel: vi.fn(),
   addCard: vi.fn(),
   completeCard: vi.fn(),
   deleteCard: vi.fn(),
@@ -41,6 +51,7 @@ describe('BoardsView with shared boards', () => {
     window.history.replaceState(null, '', '/')
     vi.mocked(listBoards).mockResolvedValue([mine, theirs])
     vi.mocked(listBoardMembers).mockResolvedValue([])
+    vi.mocked(listLabels).mockResolvedValue([])
     // Both boards are empty, so only ownership decides whether Delete shows.
     vi.mocked(getBoardById).mockImplementation(async (boardId) => ({
       id: boardId,

@@ -38,6 +38,15 @@ class OwnerOnlyError(Exception):
 class ShareError(Exception):
     """A share request that cannot be applied; the message is shown to the user."""
 
+
+class LabelError(Exception):
+    """A label change that cannot be applied; the message is shown to the user."""
+
+
+# Label colors, in the order labels are listed. A board uses each color once,
+# so it has at most eight labels. Only the key is stored; the UI owns the hex.
+LABEL_COLORS = ("blue", "green", "yellow", "red", "gray", "purple", "pink", "orange")
+
 # Default columns every new board starts with (renameable in the UI).
 DEFAULT_COLUMNS = [
     ("col-backlog", "Backlog", 0),
@@ -157,6 +166,29 @@ SCHEMA_STATEMENTS = [
     ALTER TABLE cards ADD CONSTRAINT fk_cards_created_by FOREIGN KEY IF NOT EXISTS (created_by)
         REFERENCES users(id) ON DELETE SET NULL
     """,
+    # Migration v7: labels. Each board has its own; a color is used at most once
+    # per board. `card_labels` holds which labels each card carries.
+    """
+    CREATE TABLE IF NOT EXISTS labels (
+        id VARCHAR(64) PRIMARY KEY,
+        board_id VARCHAR(64) NOT NULL,
+        name VARCHAR(64) NOT NULL,
+        color VARCHAR(16) NOT NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (board_id) REFERENCES boards(id) ON DELETE CASCADE,
+        UNIQUE KEY uq_labels_board_color (board_id, color)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS card_labels (
+        card_id VARCHAR(64) NOT NULL,
+        label_id VARCHAR(64) NOT NULL,
+        PRIMARY KEY (card_id, label_id),
+        FOREIGN KEY (card_id) REFERENCES cards(id) ON DELETE CASCADE,
+        FOREIGN KEY (label_id) REFERENCES labels(id) ON DELETE CASCADE,
+        INDEX idx_card_labels_label (label_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    """,
 ]
 
 
@@ -248,6 +280,11 @@ def initialize_database() -> None:
                 "INSERT INTO schema_migrations(version, applied_at) VALUES (6, %s)",
                 (utc_now(),),
             )
+        _exec(
+            connection,
+            "INSERT IGNORE INTO schema_migrations(version, applied_at) VALUES (7, %s)",
+            (utc_now(),),
+        )
         # Seed a single Google-only owner, keyed on the allowlist email. No user
         # is seeded without SEED_EMAIL, so the public repo never ships a default
         # (previously guessable) account. Keyed on email — not a username — so an
@@ -679,6 +716,96 @@ def unshare_board(username: str, board_id: str, user_id: str) -> list[dict[str, 
         if not removed:
             raise ValueError("This board is not shared with that user")
         return _board_members(connection, board_id)
+
+
+# --- Labels ----------------------------------------------------------------
+# Everyone who can open a board manages its labels, owner or not.
+
+
+def _board_labels(connection: Connection, board_id: str) -> list[dict[str, Any]]:
+    """The board's labels in palette order, with how many cards carry each."""
+    rows = _all(
+        connection,
+        """
+        SELECT labels.id, labels.name, labels.color, COUNT(card_labels.card_id) AS card_count
+        FROM labels
+        LEFT JOIN card_labels ON card_labels.label_id = labels.id
+        WHERE labels.board_id = %s
+        GROUP BY labels.id, labels.name, labels.color
+        """,
+        (board_id,),
+    )
+    rows.sort(key=lambda row: LABEL_COLORS.index(row["color"]))
+    return [
+        {"id": row["id"], "name": row["name"], "color": row["color"], "cardCount": row["card_count"]}
+        for row in rows
+    ]
+
+
+def _assert_color_free(
+    connection: Connection, board_id: str, color: str, label_id: str | None = None
+) -> None:
+    """A color belongs to one label per board; the label being edited keeps its own."""
+    taken = _one(
+        connection,
+        "SELECT id FROM labels WHERE board_id = %s AND color = %s",
+        (board_id, color),
+    )
+    if taken is not None and taken["id"] != label_id:
+        raise LabelError("That color is already used on this board.")
+
+
+def list_labels(username: str, board_id: str) -> list[dict[str, Any]]:
+    with connect() as connection:
+        _assert_board_access(connection, username, board_id)
+        return _board_labels(connection, board_id)
+
+
+def create_label(username: str, board_id: str, name: str, color: str) -> list[dict[str, Any]]:
+    with connect() as connection:
+        _assert_board_access(connection, username, board_id)
+        _assert_color_free(connection, board_id, color)
+        _exec(
+            connection,
+            "INSERT INTO labels(id, board_id, name, color, created_at) VALUES (%s, %s, %s, %s, %s)",
+            (f"label-{token_urlsafe(12)}", board_id, name, color, utc_now()),
+        )
+        return _board_labels(connection, board_id)
+
+
+def update_label(
+    username: str, board_id: str, label_id: str, name: str, color: str
+) -> list[dict[str, Any]]:
+    with connect() as connection:
+        _assert_board_access(connection, username, board_id)
+        label = _one(
+            connection,
+            "SELECT id FROM labels WHERE id = %s AND board_id = %s",
+            (label_id, board_id),
+        )
+        if label is None:
+            raise ValueError("Label not found")
+        _assert_color_free(connection, board_id, color, label_id)
+        _exec(
+            connection,
+            "UPDATE labels SET name = %s, color = %s WHERE id = %s",
+            (name, color, label_id),
+        )
+        return _board_labels(connection, board_id)
+
+
+def delete_label(username: str, board_id: str, label_id: str) -> list[dict[str, Any]]:
+    """Delete a label; the cards that carry it lose it (card_labels cascades)."""
+    with connect() as connection:
+        _assert_board_access(connection, username, board_id)
+        removed = _exec(
+            connection,
+            "DELETE FROM labels WHERE id = %s AND board_id = %s",
+            (label_id, board_id),
+        )
+        if not removed:
+            raise ValueError("Label not found")
+        return _board_labels(connection, board_id)
 
 
 # --- Board read ------------------------------------------------------------
