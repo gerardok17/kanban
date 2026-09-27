@@ -152,36 +152,6 @@ body {
   font-weight: 600;
 }
 
-.admin-login-page {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background-color: var(--surface);
-  padding: 2rem;
-}
-
-.admin-login-card {
-  width: 100%;
-  max-width: 420px;
-  background-color: #fff;
-  border-radius: 0.75rem;
-  padding: 2.25rem;
-  box-shadow: var(--shadow);
-  border: 1px solid rgba(0, 0, 0, 0.05);
-}
-
-.admin-login-card h1 {
-  margin-bottom: 0.75rem;
-  color: var(--navy-dark);
-  font-family: var(--font-display), 'Segoe UI', sans-serif;
-}
-
-.admin-login-card p {
-  margin-bottom: 1.5rem;
-  color: var(--gray-text);
-}
-
 .login-error {
   margin-bottom: 1rem;
   color: var(--accent-red);
