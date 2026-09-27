@@ -12,6 +12,7 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from '@dnd-kit/core'
+import { CardDialog, type CardDialogMode } from '@/components/CardDialog'
 import { KanbanColumn } from '@/components/KanbanColumn'
 import { KanbanCardPreview } from '@/components/KanbanCardPreview'
 import {
@@ -33,6 +34,11 @@ import {
   type BoardData,
 } from '@/lib/kanban'
 
+// Which card dialog is open: a new card for a column, or an existing card.
+type CardDialogState =
+  | { mode: 'create'; columnId: string }
+  | { mode: Exclude<CardDialogMode, 'create'>; cardId: string }
+
 export const KanbanBoard = ({
   onLogout,
   remote = false,
@@ -48,6 +54,7 @@ export const KanbanBoard = ({
   const [activeCardId, setActiveCardId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(remote)
   const [error, setError] = useState('')
+  const [cardDialog, setCardDialog] = useState<CardDialogState | null>(null)
 
   useEffect(() => {
     if (!remote) {
@@ -218,6 +225,19 @@ export const KanbanBoard = ({
   }
 
   const activeCard = activeCardId ? cardsById[activeCardId] : null
+  const dialogCard =
+    cardDialog && cardDialog.mode !== 'create' ? board.cards[cardDialog.cardId] : undefined
+
+  const handleSaveCardDialog = (title: string, details: string) => {
+    if (!cardDialog) {
+      return
+    }
+    if (cardDialog.mode === 'create') {
+      handleAddCard(cardDialog.columnId, title, details)
+    } else {
+      handleEditCard(cardDialog.cardId, title, details)
+    }
+  }
 
   if (isLoading) {
     return (
@@ -249,8 +269,9 @@ export const KanbanBoard = ({
               column={column}
               cards={column.cardIds.map((cardId) => board.cards[cardId])}
               onRename={handleRenameColumn}
-              onAddCard={handleAddCard}
-              onEditCard={handleEditCard}
+              onAddCard={(columnId) => setCardDialog({ mode: 'create', columnId })}
+              onViewCard={(cardId) => setCardDialog({ mode: 'view', cardId })}
+              onEditCard={(cardId) => setCardDialog({ mode: 'edit', cardId })}
               onDeleteCard={handleDeleteCard}
               canComplete={remote && isDoneColumn(column.id)}
               onCompleteCard={handleCompleteCard}
@@ -265,6 +286,16 @@ export const KanbanBoard = ({
           ) : null}
         </DragOverlay>
       </DndContext>
+
+      {cardDialog && (cardDialog.mode === 'create' || dialogCard) ? (
+        <CardDialog
+          key={cardDialog.mode === 'create' ? `new-${cardDialog.columnId}` : cardDialog.cardId}
+          initialMode={cardDialog.mode}
+          card={dialogCard}
+          onSave={handleSaveCardDialog}
+          onClose={() => setCardDialog(null)}
+        />
+      ) : null}
     </main>
   )
 }

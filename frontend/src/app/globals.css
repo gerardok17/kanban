@@ -325,3 +325,84 @@ body {
 .admin-banner-usermenu-item:hover {
   background-color: rgba(255, 255, 255, 0.12);
 }
+
+/* Rendered card descriptions (MarkdownContent) and the card editor share the
+   same typography, so what you type looks like what the card shows. */
+.markdown-content,
+.card-editor .ProseMirror {
+  font-size: 0.875rem;
+  line-height: 1.5rem;
+  color: rgba(0, 0, 0, 0.7);
+  overflow-wrap: anywhere;
+}
+
+.markdown-content > * + *,
+.card-editor .ProseMirror > * + * {
+  margin-top: 0.5rem;
+}
+
+.markdown-content ul,
+.card-editor .ProseMirror ul {
+  list-style: disc;
+  padding-left: 1.25rem;
+}
+
+.markdown-content ol,
+.card-editor .ProseMirror ol {
+  list-style: decimal;
+  padding-left: 1.25rem;
+}
+
+.markdown-content ul.contains-task-list,
+.card-editor .ProseMirror ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 0;
+}
+
+.markdown-content .task-list-item input {
+  margin-right: 0.4rem;
+  vertical-align: middle;
+}
+
+.card-editor .ProseMirror ul[data-type="taskList"] li {
+  display: flex;
+  gap: 0.4rem;
+  align-items: flex-start;
+}
+
+.card-editor .ProseMirror ul[data-type="taskList"] li > label {
+  margin-top: 0.1rem;
+}
+
+.card-editor .ProseMirror ul[data-type="taskList"] li > div {
+  flex: 1;
+}
+
+.markdown-content a,
+.card-editor .ProseMirror a {
+  color: var(--primary-blue);
+  text-decoration: underline;
+}
+
+.markdown-content code,
+.card-editor .ProseMirror code {
+  border-radius: 0.3rem;
+  background: rgba(3, 33, 71, 0.08);
+  padding: 0.05rem 0.3rem;
+  font-size: 0.8rem;
+}
+
+.card-editor .ProseMirror {
+  min-height: 12rem;
+  max-height: 50vh;
+  overflow-y: auto;
+  outline: none;
+}
+
+.card-editor .ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  color: rgba(0, 0, 0, 0.35);
+}
