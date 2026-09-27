@@ -3,14 +3,15 @@ import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import type { Card, Column } from "@/lib/kanban";
 import { KanbanCard } from "@/components/KanbanCard";
-import { NewCardForm } from "@/components/NewCardForm";
 
 type KanbanColumnProps = {
   column: Column;
   cards: Card[];
   onRename: (columnId: string, title: string) => void;
-  onAddCard: (columnId: string, title: string, details: string) => void;
-  onEditCard: (cardId: string, title: string, details: string) => void;
+  // Open the card dialog: to create a card in this column, or to view/edit one.
+  onAddCard: (columnId: string) => void;
+  onViewCard: (cardId: string) => void;
+  onEditCard: (cardId: string) => void;
   onDeleteCard: (columnId: string, cardId: string) => void;
   // When true, this is the Done column and its cards can be completed.
   canComplete?: boolean;
@@ -22,6 +23,7 @@ export const KanbanColumn = ({
   cards,
   onRename,
   onAddCard,
+  onViewCard,
   onEditCard,
   onDeleteCard,
   canComplete = false,
@@ -75,6 +77,7 @@ export const KanbanColumn = ({
             <KanbanCard
               key={card.id}
               card={card}
+              onView={onViewCard}
               onEdit={onEditCard}
               onDelete={(cardId) => onDeleteCard(column.id, cardId)}
               canComplete={canComplete}
@@ -88,9 +91,13 @@ export const KanbanColumn = ({
           </div>
         )}
       </div>
-      <NewCardForm
-        onAdd={(title, details) => onAddCard(column.id, title, details)}
-      />
+      <button
+        type="button"
+        onClick={() => onAddCard(column.id)}
+        className="mt-4 w-full rounded-full border border-dashed border-[var(--stroke)] px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--primary-blue)] transition hover:border-[var(--primary-blue)]"
+      >
+        Add a card
+      </button>
     </section>
   );
 };

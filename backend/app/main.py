@@ -7,7 +7,7 @@ from authlib.integrations.starlette_client import OAuth
 from fastapi import Cookie, FastAPI, HTTPException, Request, Response, status
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from starlette.middleware.sessions import SessionMiddleware
 
 from . import database
@@ -63,15 +63,22 @@ class ColumnRenameRequest(BaseModel):
     title: str
 
 
+# Card field limits. Enforced here, not only in the UI, so every client (the web
+# app today, API/MCP clients later) gets the same 422 on oversized input.
+# `details` is Markdown, so its limit counts the markup characters too.
+CARD_TITLE_MAX_LENGTH = 64
+CARD_DETAILS_MAX_LENGTH = 5000
+
+
 class CardCreateRequest(BaseModel):
     columnId: str
-    title: str
-    details: str = ""
+    title: str = Field(max_length=CARD_TITLE_MAX_LENGTH)
+    details: str = Field(default="", max_length=CARD_DETAILS_MAX_LENGTH)
 
 
 class CardUpdateRequest(BaseModel):
-    title: str
-    details: str | None = None
+    title: str = Field(max_length=CARD_TITLE_MAX_LENGTH)
+    details: str | None = Field(default=None, max_length=CARD_DETAILS_MAX_LENGTH)
 
 
 class CardMoveRequest(BaseModel):

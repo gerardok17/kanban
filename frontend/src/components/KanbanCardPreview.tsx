@@ -1,3 +1,4 @@
+import { MarkdownContent } from '@/components/MarkdownContent'
 import type { Card } from '@/lib/kanban'
 
 type KanbanCardPreviewProps = {
@@ -11,7 +12,9 @@ export const KanbanCardPreview = ({ card }: KanbanCardPreviewProps) => (
         <h4 className='font-display text-base font-semibold break-words text-[var(--primary-blue)]'>
           {card.title}
         </h4>
-        <p className='mt-2 text-sm leading-6 break-words text-black/70'>{card.details}</p>
+        {card.details ? (
+          <MarkdownContent markdown={card.details} className='mt-2 line-clamp-5' />
+        ) : null}
       </div>
     </div>
   </article>
