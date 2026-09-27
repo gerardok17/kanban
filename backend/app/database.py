@@ -822,7 +822,9 @@ def create_card(
     return board_id
 
 
-def update_card(username: str, card_id: str, title: str, details: str | None) -> str:
+def update_card(
+    username: str, card_id: str, title: str, details: str | None, column_id: str | None = None
+) -> str:
     with connect() as connection:
         board_id = _board_id_for_card(connection, username, card_id)
         _exec(
@@ -830,6 +832,14 @@ def update_card(username: str, card_id: str, title: str, details: str | None) ->
             "UPDATE cards SET title = %s, details = %s, updated_at = %s WHERE id = %s AND board_id = %s",
             (title, details, utc_now(), card_id, board_id),
         )
+        # A new status moves the card to the end of that column; its current
+        # column keeps the card where it is.
+        if column_id is not None:
+            current = _one(
+                connection, "SELECT column_id FROM card_positions WHERE card_id = %s", (card_id,)
+            )
+            if current is None or current["column_id"] != column_id:
+                _place_card(connection, board_id, card_id, column_id)
         _exec(
             connection,
             "UPDATE boards SET updated_at = %s WHERE id = %s",
@@ -886,49 +896,56 @@ def complete_card(username: str, card_id: str) -> str:
 def move_card(username: str, card_id: str, column_id: str, position: int) -> str:
     with connect() as connection:
         board_id = _board_id_for_card(connection, username, card_id)
-        column = _one(
-            connection,
-            "SELECT id FROM `columns` WHERE id = %s AND board_id = %s",
-            (column_id, board_id),
-        )
-        if column is None or position < 0:
-            raise ValueError("Invalid card move")
-        _exec(
-            connection,
-            "DELETE FROM card_positions WHERE card_id = %s AND board_id = %s",
-            (card_id, board_id),
-        )
-        normalize_positions(connection, board_id)
-        count = _one(
-            connection,
-            "SELECT COUNT(*) AS count FROM card_positions WHERE column_id = %s",
-            (column_id,),
-        )["count"]
-        insert_position = min(position, count)
-        # Large-offset shuffle to sidestep the UNIQUE(column_id, position)
-        # constraint mid-update, then normalize back to contiguous positions.
-        _exec(
-            connection,
-            "UPDATE card_positions SET position = position + 1000000 WHERE column_id = %s AND position >= %s",
-            (column_id, insert_position),
-        )
-        _exec(
-            connection,
-            "UPDATE card_positions SET position = position - 999999 WHERE column_id = %s AND position >= %s",
-            (column_id, insert_position + 1000000),
-        )
-        _exec(
-            connection,
-            "INSERT INTO card_positions(board_id, column_id, card_id, position) VALUES (%s, %s, %s, %s)",
-            (board_id, column_id, card_id, insert_position),
-        )
-        normalize_positions(connection, board_id)
+        _place_card(connection, board_id, card_id, column_id, position)
         _exec(
             connection,
             "UPDATE boards SET updated_at = %s WHERE id = %s",
             (utc_now(), board_id),
         )
     return board_id
+
+
+def _place_card(
+    connection: Connection, board_id: str, card_id: str, column_id: str, position: int | None = None
+) -> None:
+    """Put a card at `position` in a column of its board; None means at the end."""
+    column = _one(
+        connection,
+        "SELECT id FROM `columns` WHERE id = %s AND board_id = %s",
+        (column_id, board_id),
+    )
+    if column is None or (position is not None and position < 0):
+        raise ValueError("Invalid card move")
+    _exec(
+        connection,
+        "DELETE FROM card_positions WHERE card_id = %s AND board_id = %s",
+        (card_id, board_id),
+    )
+    normalize_positions(connection, board_id)
+    count = _one(
+        connection,
+        "SELECT COUNT(*) AS count FROM card_positions WHERE column_id = %s",
+        (column_id,),
+    )["count"]
+    insert_position = count if position is None else min(position, count)
+    # Large-offset shuffle to sidestep the UNIQUE(column_id, position)
+    # constraint mid-update, then normalize back to contiguous positions.
+    _exec(
+        connection,
+        "UPDATE card_positions SET position = position + 1000000 WHERE column_id = %s AND position >= %s",
+        (column_id, insert_position),
+    )
+    _exec(
+        connection,
+        "UPDATE card_positions SET position = position - 999999 WHERE column_id = %s AND position >= %s",
+        (column_id, insert_position + 1000000),
+    )
+    _exec(
+        connection,
+        "INSERT INTO card_positions(board_id, column_id, card_id, position) VALUES (%s, %s, %s, %s)",
+        (board_id, column_id, card_id, insert_position),
+    )
+    normalize_positions(connection, board_id)
 
 
 def normalize_positions(connection: Connection, board_id: str) -> None:

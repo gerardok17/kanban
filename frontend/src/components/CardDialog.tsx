@@ -8,7 +8,7 @@ import { MarkdownContent } from '@/components/MarkdownContent'
 import { RichTextEditor } from '@/components/RichTextEditor'
 import { CARD_DETAILS_MAX_LENGTH, CARD_TITLE_MAX_LENGTH } from '@/lib/cardEditor'
 import { formatDateTime } from '@/lib/dates'
-import type { Card } from '@/lib/kanban'
+import type { Card, Column } from '@/lib/kanban'
 
 export type CardDialogMode = 'create' | 'view' | 'edit'
 
@@ -16,7 +16,11 @@ type CardDialogProps = {
   // Mount with a `key` per card/open so each opening starts from fresh state.
   initialMode: CardDialogMode
   card?: Card
-  onSave: (title: string, details: string) => void
+  // The card's status is its column: the options, and where it is (or, for a
+  // new card, where it goes).
+  columns: Column[]
+  initialColumnId: string
+  onSave: (title: string, details: string, columnId: string) => void
   onClose: () => void
 }
 
@@ -54,12 +58,20 @@ const CreatedLine = ({ card }: { card?: Card }) => {
 
 // The card's own place: create it, read it in full, or edit it. Labels and
 // per-card messages are meant to live here too.
-export const CardDialog = ({ initialMode, card, onSave, onClose }: CardDialogProps) => {
+export const CardDialog = ({
+  initialMode,
+  card,
+  columns,
+  initialColumnId,
+  onSave,
+  onClose,
+}: CardDialogProps) => {
   const [mode, setMode] = useState<CardDialogMode>(initialMode)
   const initialTitle = card?.title ?? ''
   const initialDetails = card?.details ?? ''
   const [title, setTitle] = useState(initialTitle)
   const [details, setDetails] = useState(initialDetails)
+  const [columnId, setColumnId] = useState(initialColumnId)
   // The editor normalises the Markdown it loads; compare against that, not the
   // raw stored text, or opening a card would count as a change.
   const [detailsBaseline, setDetailsBaseline] = useState<string | null>(null)
@@ -68,7 +80,9 @@ export const CardDialog = ({ initialMode, card, onSave, onClose }: CardDialogPro
   const isEditing = mode !== 'view'
   const isDirty =
     isEditing &&
-    (title !== initialTitle || (detailsBaseline !== null && details !== detailsBaseline))
+    (title !== initialTitle ||
+      columnId !== initialColumnId ||
+      (detailsBaseline !== null && details !== detailsBaseline))
   const canSave =
     title.trim().length > 0 &&
     title.length <= CARD_TITLE_MAX_LENGTH &&
@@ -86,7 +100,7 @@ export const CardDialog = ({ initialMode, card, onSave, onClose }: CardDialogPro
     if (!canSave) {
       return
     }
-    onSave(title.trim(), details.trim())
+    onSave(title.trim(), details.trim(), columnId)
     onClose()
   }
 
@@ -166,6 +180,20 @@ export const CardDialog = ({ initialMode, card, onSave, onClose }: CardDialogPro
               <div className='mt-1 flex justify-end'>
                 <Counter length={title.length} max={CARD_TITLE_MAX_LENGTH} />
               </div>
+            </div>
+            <div className='flex justify-end'>
+              <select
+                value={columnId}
+                onChange={(event) => setColumnId(event.target.value)}
+                aria-label='Status'
+                className='min-w-44 rounded-xl border border-[var(--stroke)] bg-white px-3 py-2 text-sm text-[var(--navy-dark)] outline-none transition focus:border-[var(--primary-blue)]'
+              >
+                {columns.map((column) => (
+                  <option key={column.id} value={column.id}>
+                    {column.title}
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
               <RichTextEditor
