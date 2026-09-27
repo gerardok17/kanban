@@ -1,4 +1,5 @@
 import type { BoardData } from "@/lib/kanban";
+import type { LabelColor } from "@/lib/labels";
 
 // `detail` carries the server's human-readable reason when it sends one (e.g.
 // why a board could not be shared), so the UI can show it as-is.
@@ -116,6 +117,40 @@ export const shareBoard = (boardId: string, email: string) =>
 
 export const unshareBoard = (boardId: string, userId: string) =>
   request<BoardMember[]>(`/api/boards/${boardId}/members/${userId}`, {
+    method: "DELETE",
+  });
+
+// A board's labels, in palette order. Everyone who can open the board manages
+// them; each change returns the refreshed list.
+export type Label = {
+  id: string;
+  name: string;
+  color: LabelColor;
+  cardCount: number;
+};
+
+export const listLabels = (boardId: string) =>
+  request<Label[]>(`/api/boards/${boardId}/labels`);
+
+export const createLabel = (boardId: string, name: string, color: LabelColor) =>
+  request<Label[]>(`/api/boards/${boardId}/labels`, {
+    method: "POST",
+    body: JSON.stringify({ name, color }),
+  });
+
+export const updateLabel = (
+  boardId: string,
+  labelId: string,
+  name: string,
+  color: LabelColor,
+) =>
+  request<Label[]>(`/api/boards/${boardId}/labels/${labelId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ name, color }),
+  });
+
+export const deleteLabel = (boardId: string, labelId: string) =>
+  request<Label[]>(`/api/boards/${boardId}/labels/${labelId}`, {
     method: "DELETE",
   });
 

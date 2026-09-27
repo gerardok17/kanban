@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { KanbanBoard } from '@/components/KanbanBoard'
 import { BoardSelector } from '@/components/BoardSelector'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { LabelsSelector } from '@/components/LabelsSelector'
 import { SharedWithSelector } from '@/components/SharedWithSelector'
 import {
   createBoard,
@@ -127,13 +128,17 @@ export const BoardsView = ({ onLogout, remote = false }: BoardsViewProps) => {
 
   return (
     <>
-      <div className='mx-auto flex max-w-[1500px] items-center justify-end gap-3 px-6 pt-4'>
+      {/* Wraps on phones instead of pushing the first buttons off the left edge. */}
+      <div className='relative mx-auto flex max-w-[1500px] flex-wrap items-center justify-end gap-3 px-6 pt-4'>
         {activeBoard ? (
-          <SharedWithSelector
-            key={activeBoard.id}
-            boardId={activeBoard.id}
-            isOwner={activeBoard.isOwner}
-          />
+          <>
+            <LabelsSelector key={`labels-${activeBoard.id}`} boardId={activeBoard.id} />
+            <SharedWithSelector
+              key={activeBoard.id}
+              boardId={activeBoard.id}
+              isOwner={activeBoard.isOwner}
+            />
+          </>
         ) : null}
         <BoardSelector
           boards={boards}

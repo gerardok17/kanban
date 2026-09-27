@@ -29,6 +29,12 @@ collections, with `column.cardIds` preserving card order.
 - `board_shares`: `board_id` and `user_id` (composite primary key, both foreign
   keys, cascading), and `created_at`. The users a board is shared with;
   `boards.user_id` remains its one owner.
+- `labels`: `id` primary key, `board_id` foreign key to `boards` (cascading),
+  `name`, `color` (a palette key such as `blue`; the UI owns the hex), and
+  `created_at`. A unique `(board_id, color)` constraint gives each color to one
+  label per board, so a board has at most eight labels.
+- `card_labels`: `card_id` and `label_id` (composite primary key, both foreign
+  keys, cascading). Which labels each card carries.
 - `card_positions`: `board_id`, `column_id`, `card_id`, and `position`, with
   foreign keys and unique `(column_id, position)` and `(column_id, card_id)`
   constraints. This is the relational equivalent of `column.cardIds` and makes
@@ -52,8 +58,9 @@ Timestamps are stored in UTC and returned as ISO 8601 strings with an explicit
 Migrations are additive, recorded in `schema_migrations`, and applied in order
 before serving requests: `1` the base schema, `2` `cards.completed_at`, `3`
 `users.email` with a nullable `password_hash` (Google sign-in), `4` `users.role`,
-`5` `board_shares`, and `6` `cards.created_by`. Migration 6 credits existing cards
-to their board's owner, once; afterwards a `NULL` creator means a deleted user.
+`5` `board_shares`, `6` `cards.created_by`, and `7` `labels` with `card_labels`.
+Migration 6 credits existing cards to their board's owner, once; afterwards a `NULL`
+creator means a deleted user.
 
 ## Mutation rules
 
@@ -63,6 +70,9 @@ to their board's owner, once; afterwards a `NULL` creator means a deleted user.
   unsharing, renaming, and deleting the board are owner-only.
 - A board can be deleted only when it has no active cards; its completed cards are
   deleted with it. Sharing is by the email of an existing user.
+- Everyone who can open a board manages its labels. Names are trimmed, required,
+  and at most 16 characters, and may repeat; a color already used on the board is
+  rejected. Deleting a label takes it off every card that carries it.
 - User administration (list, add, change role, delete) is admin-only; the role is
   read from the database on every request. Deleting a user also ends their sessions.
 - IDs must be non-empty and unique within their entity type.
