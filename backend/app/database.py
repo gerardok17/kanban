@@ -30,6 +30,14 @@ SEED_EMAIL = os.getenv("SEED_EMAIL", "").strip()
 # permissions.
 USER_ROLES = ("admin", "user")
 
+
+class OwnerOnlyError(Exception):
+    """The user can open the board, but only its owner may do this."""
+
+
+class ShareError(Exception):
+    """A share request that cannot be applied; the message is shown to the user."""
+
 # Default columns every new board starts with (renameable in the UI).
 DEFAULT_COLUMNS = [
     ("col-backlog", "Backlog", 0),
@@ -126,6 +134,19 @@ SCHEMA_STATEMENTS = [
     """
     ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(16) NOT NULL DEFAULT 'user'
     """,
+    # Migration v5: shared boards. `boards.user_id` stays the one owner; this
+    # table only lists the other users a board is shared with.
+    """
+    CREATE TABLE IF NOT EXISTS board_shares (
+        board_id VARCHAR(64) NOT NULL,
+        user_id VARCHAR(64) NOT NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (board_id, user_id),
+        FOREIGN KEY (board_id) REFERENCES boards(id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        INDEX idx_board_shares_user (user_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    """,
 ]
 
 
@@ -187,6 +208,11 @@ def initialize_database() -> None:
         _exec(
             connection,
             "INSERT IGNORE INTO schema_migrations(version, applied_at) VALUES (4, %s)",
+            (utc_now(),),
+        )
+        _exec(
+            connection,
+            "INSERT IGNORE INTO schema_migrations(version, applied_at) VALUES (5, %s)",
             (utc_now(),),
         )
         # Seed a single Google-only owner, keyed on the allowlist email. No user
@@ -357,9 +383,20 @@ def delete_user(user_id: str) -> str:
     return target["username"]
 
 
-# --- Ownership helpers -----------------------------------------------------
-# Every mutation resolves the affected board from the target entity and confirms
-# it belongs to the signed-in user, so client-supplied IDs are never trusted.
+# --- Access helpers --------------------------------------------------------
+# Every read and mutation resolves the affected board from the target entity and
+# confirms the signed-in user may open it, so client-supplied IDs are never
+# trusted. A user may open a board they own or one shared with them; only the
+# owner may share it, rename it, or delete it.
+
+# SQL predicate over a joined `boards` row and the signed-in `users` row.
+_CAN_OPEN_BOARD = """(
+    boards.user_id = users.id
+    OR EXISTS (
+        SELECT 1 FROM board_shares
+        WHERE board_shares.board_id = boards.id AND board_shares.user_id = users.id
+    )
+)"""
 
 
 def _user_id(connection: Connection, username: str) -> str:
@@ -387,30 +424,41 @@ def board_id_for_user(connection: Connection, username: str) -> str:
     return board["id"]
 
 
-def _assert_board_owned(connection: Connection, username: str, board_id: str) -> None:
+def _is_board_owner(connection: Connection, username: str, board_id: str) -> bool:
+    """Whether the user owns the board; raises ValueError if they cannot open it."""
     row = _one(
         connection,
-        """
-        SELECT boards.id FROM boards
-        JOIN users ON users.id = boards.user_id
-        WHERE boards.id = %s AND users.username = %s
+        f"""
+        SELECT boards.user_id = users.id AS is_owner FROM boards
+        JOIN users ON users.username = %s
+        WHERE boards.id = %s AND {_CAN_OPEN_BOARD}
         """,
-        (board_id, username),
+        (username, board_id),
     )
     if row is None:
         raise ValueError("Board not found")
+    return bool(row["is_owner"])
+
+
+def _assert_board_access(connection: Connection, username: str, board_id: str) -> None:
+    _is_board_owner(connection, username, board_id)
+
+
+def _assert_board_owner(connection: Connection, username: str, board_id: str) -> None:
+    if not _is_board_owner(connection, username, board_id):
+        raise OwnerOnlyError("Only the board's owner can do that")
 
 
 def _board_id_for_column(connection: Connection, username: str, column_id: str) -> str:
     row = _one(
         connection,
-        """
+        f"""
         SELECT `columns`.board_id FROM `columns`
         JOIN boards ON boards.id = `columns`.board_id
-        JOIN users ON users.id = boards.user_id
-        WHERE `columns`.id = %s AND users.username = %s
+        JOIN users ON users.username = %s
+        WHERE `columns`.id = %s AND {_CAN_OPEN_BOARD}
         """,
-        (column_id, username),
+        (username, column_id),
     )
     if row is None:
         raise ValueError("Column not found")
@@ -420,13 +468,13 @@ def _board_id_for_column(connection: Connection, username: str, column_id: str) 
 def _board_id_for_card(connection: Connection, username: str, card_id: str) -> str:
     row = _one(
         connection,
-        """
+        f"""
         SELECT cards.board_id FROM cards
         JOIN boards ON boards.id = cards.board_id
-        JOIN users ON users.id = boards.user_id
-        WHERE cards.id = %s AND users.username = %s
+        JOIN users ON users.username = %s
+        WHERE cards.id = %s AND {_CAN_OPEN_BOARD}
         """,
-        (card_id, username),
+        (username, card_id),
     )
     if row is None:
         raise ValueError("Card not found")
@@ -437,19 +485,31 @@ def _board_id_for_card(connection: Connection, username: str, card_id: str) -> s
 
 
 def list_boards(username: str) -> list[dict[str, Any]]:
+    """The boards the user can open: their own first, then those shared with them."""
     with connect() as connection:
         boards = _all(
             connection,
-            """
-            SELECT boards.id, boards.title, boards.position FROM boards
-            JOIN users ON users.id = boards.user_id
-            WHERE users.username = %s
-            ORDER BY boards.position, boards.created_at
+            f"""
+            SELECT boards.id, boards.title, boards.position,
+                boards.user_id = users.id AS is_owner,
+                COALESCE(owners.email, owners.username) AS owner_email
+            FROM boards
+            JOIN users ON users.username = %s
+            JOIN users AS owners ON owners.id = boards.user_id
+            WHERE {_CAN_OPEN_BOARD}
+            ORDER BY is_owner DESC, boards.position, boards.created_at
             """,
             (username,),
         )
     return [
-        {"id": b["id"], "title": b["title"], "position": b["position"]} for b in boards
+        {
+            "id": b["id"],
+            "title": b["title"],
+            "position": b["position"],
+            "isOwner": bool(b["is_owner"]),
+            "ownerEmail": b["owner_email"],
+        }
+        for b in boards
     ]
 
 
@@ -480,7 +540,7 @@ def create_board(username: str, board_id: str, title: str) -> str:
 
 def rename_board(username: str, board_id: str, title: str) -> None:
     with connect() as connection:
-        _assert_board_owned(connection, username, board_id)
+        _assert_board_owner(connection, username, board_id)
         _exec(
             connection,
             "UPDATE boards SET title = %s, updated_at = %s WHERE id = %s",
@@ -490,7 +550,15 @@ def rename_board(username: str, board_id: str, title: str) -> None:
 
 def delete_board(username: str, board_id: str) -> None:
     with connect() as connection:
-        _assert_board_owned(connection, username, board_id)
+        _assert_board_owner(connection, username, board_id)
+        # Only an empty board can go; its completed (archived) cards go with it.
+        active_cards = _one(
+            connection,
+            "SELECT COUNT(*) AS count FROM cards WHERE board_id = %s AND completed_at IS NULL",
+            (board_id,),
+        )["count"]
+        if active_cards:
+            raise ValueError("Only a board without cards can be deleted")
         remaining = _one(
             connection,
             """
@@ -505,6 +573,81 @@ def delete_board(username: str, board_id: str) -> None:
         _exec(connection, "DELETE FROM boards WHERE id = %s", (board_id,))
 
 
+# --- Board sharing ---------------------------------------------------------
+
+
+def _board_members(connection: Connection, board_id: str) -> list[dict[str, Any]]:
+    """Everyone who can open the board: the owner first, then shares by date."""
+    rows = _all(
+        connection,
+        """
+        SELECT users.id, COALESCE(users.email, users.username) AS email,
+            1 AS is_owner, boards.created_at AS since
+        FROM boards JOIN users ON users.id = boards.user_id
+        WHERE boards.id = %s
+        UNION ALL
+        SELECT users.id, COALESCE(users.email, users.username) AS email,
+            0 AS is_owner, board_shares.created_at AS since
+        FROM board_shares JOIN users ON users.id = board_shares.user_id
+        WHERE board_shares.board_id = %s
+        ORDER BY is_owner DESC, since
+        """,
+        (board_id, board_id),
+    )
+    return [
+        {"id": row["id"], "email": row["email"], "isOwner": bool(row["is_owner"])}
+        for row in rows
+    ]
+
+
+def list_board_members(username: str, board_id: str) -> list[dict[str, Any]]:
+    with connect() as connection:
+        _assert_board_access(connection, username, board_id)
+        return _board_members(connection, board_id)
+
+
+def share_board(username: str, board_id: str, email: str) -> list[dict[str, Any]]:
+    """Share a board with an existing user, by email. Owner only."""
+    normalized = email.strip().lower()
+    with connect() as connection:
+        _assert_board_owner(connection, username, board_id)
+        target = _one(connection, "SELECT id FROM users WHERE LOWER(email) = %s", (normalized,))
+        if target is None:
+            raise ShareError(
+                "This email hasn't been added as a user yet. Only an admin can add users."
+            )
+        owner = _one(connection, "SELECT user_id FROM boards WHERE id = %s", (board_id,))
+        if target["id"] == owner["user_id"]:
+            raise ShareError("You already own this board.")
+        existing = _one(
+            connection,
+            "SELECT board_id FROM board_shares WHERE board_id = %s AND user_id = %s",
+            (board_id, target["id"]),
+        )
+        if existing is not None:
+            raise ShareError("This board is already shared with that email.")
+        _exec(
+            connection,
+            "INSERT INTO board_shares(board_id, user_id, created_at) VALUES (%s, %s, %s)",
+            (board_id, target["id"], utc_now()),
+        )
+        return _board_members(connection, board_id)
+
+
+def unshare_board(username: str, board_id: str, user_id: str) -> list[dict[str, Any]]:
+    """Stop sharing a board with a user. Owner only."""
+    with connect() as connection:
+        _assert_board_owner(connection, username, board_id)
+        removed = _exec(
+            connection,
+            "DELETE FROM board_shares WHERE board_id = %s AND user_id = %s",
+            (board_id, user_id),
+        )
+        if not removed:
+            raise ValueError("This board is not shared with that user")
+        return _board_members(connection, board_id)
+
+
 # --- Board read ------------------------------------------------------------
 
 
@@ -516,7 +659,7 @@ def get_board_for_user(username: str) -> dict[str, Any]:
 
 def get_board(username: str, board_id: str) -> dict[str, Any]:
     with connect() as connection:
-        _assert_board_owned(connection, username, board_id)
+        _assert_board_access(connection, username, board_id)
         return _read_board(connection, board_id)
 
 

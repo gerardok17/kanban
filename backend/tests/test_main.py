@@ -1,5 +1,3 @@
-import os
-
 import pytest
 from fastapi.testclient import TestClient
 
@@ -7,14 +5,12 @@ from app import database
 from app.main import app
 
 # The backend now runs on MariaDB; this suite still assumes the old SQLite setup
-# and hardcoded login, and needs a disposable MariaDB test database. Skip it until
-# it is ported, unless one is explicitly provided.
-if not os.getenv("KANBAN_TEST_DATABASE"):
-    pytest.skip(
-        "Backend tests require a MariaDB test database (set KANBAN_TEST_DATABASE); "
-        "port from the SQLite suite pending.",
-        allow_module_level=True,
-    )
+# and hardcoded login. Skip it until it is ported; tests/test_board_sharing.py
+# shows the disposable-database setup (KANBAN_TEST_DATABASE) a port can reuse.
+pytest.skip(
+    "SQLite-era suite; its MariaDB port is pending (see tests/test_board_sharing.py).",
+    allow_module_level=True,
+)
 
 
 client = TestClient(app)

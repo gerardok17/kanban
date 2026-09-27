@@ -145,7 +145,7 @@ export const UsersView = ({ remote = false }: { remote?: boolean }) => {
         title='Delete user'
         message={
           userToDelete
-            ? `"${userToDelete.email ?? userToDelete.username}" will be permanently removed, along with their boards.`
+            ? `"${userToDelete.email ?? userToDelete.username}" will be permanently removed, along with their boards — including boards they shared with others.`
             : ''
         }
         confirmLabel='Delete'

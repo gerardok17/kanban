@@ -1,6 +1,8 @@
 import type { BoardData } from "@/lib/kanban";
 
-type ApiError = Error & { status?: number };
+// `detail` carries the server's human-readable reason when it sends one (e.g.
+// why a board could not be shared), so the UI can show it as-is.
+export type ApiError = Error & { status?: number; detail?: string };
 
 const request = async <T>(path: string, options?: RequestInit): Promise<T> => {
   const response = await fetch(path, {
@@ -14,6 +16,10 @@ const request = async <T>(path: string, options?: RequestInit): Promise<T> => {
   if (!response.ok) {
     const error: ApiError = new Error("The server could not complete that request.");
     error.status = response.status;
+    const body = await response.json().catch(() => null);
+    if (typeof body?.detail === "string") {
+      error.detail = body.detail;
+    }
     throw error;
   }
 
@@ -59,6 +65,9 @@ export type BoardSummary = {
   id: string;
   title: string;
   position: number;
+  // False for a board someone else owns and shared with the signed-in user.
+  isOwner: boolean;
+  ownerEmail: string;
 };
 
 // A card archived off the board via the "complete" action. Surfaced in the
@@ -86,6 +95,28 @@ export const createBoard = (title: string) =>
 
 export const deleteBoard = (boardId: string) =>
   request<BoardSummary[]>(`/api/boards/${boardId}`, { method: "DELETE" });
+
+// Everyone who can open a board: the owner first, then the users it is shared
+// with. Only the owner may share or unshare; both return the refreshed list.
+export type BoardMember = {
+  id: string;
+  email: string;
+  isOwner: boolean;
+};
+
+export const listBoardMembers = (boardId: string) =>
+  request<BoardMember[]>(`/api/boards/${boardId}/members`);
+
+export const shareBoard = (boardId: string, email: string) =>
+  request<BoardMember[]>(`/api/boards/${boardId}/members`, {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+
+export const unshareBoard = (boardId: string, userId: string) =>
+  request<BoardMember[]>(`/api/boards/${boardId}/members/${userId}`, {
+    method: "DELETE",
+  });
 
 // App-level roles: admins manage users; users only use their boards.
 export type Role = "admin" | "user";
