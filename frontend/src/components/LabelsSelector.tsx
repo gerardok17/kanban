@@ -1,6 +1,6 @@
 'use client'
 
-import { FormEvent, useEffect, useRef, useState } from 'react'
+import { FormEvent, useCallback, useEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { LabelChip } from '@/components/LabelChip'
@@ -10,18 +10,20 @@ import {
   listLabels,
   updateLabel,
   type ApiError,
-  type Label,
 } from '@/lib/api'
 import {
   LABEL_COLORS,
   LABEL_COLOR_KEYS,
   LABEL_NAME_MAX_LENGTH,
+  type Label,
   type LabelColor,
 } from '@/lib/labels'
 
 type LabelsSelectorProps = {
   // Mount with key={boardId} so switching boards starts from fresh state.
   boardId: string
+  // Called after every label change, so the board shows the new names and colors.
+  onChange?: () => void
 }
 
 // The label being added (no id yet) or edited.
@@ -36,7 +38,7 @@ const deleteMessage = (label: Label) =>
 
 // The board's labels, left of "Shared with". Everyone who can open the board
 // manages them. Each color is used once, so a board has up to eight labels.
-export const LabelsSelector = ({ boardId }: LabelsSelectorProps) => {
+export const LabelsSelector = ({ boardId, onChange }: LabelsSelectorProps) => {
   const [open, setOpen] = useState(false)
   const [labels, setLabels] = useState<Label[]>([])
   const [draft, setDraft] = useState<LabelDraft | null>(null)
@@ -45,11 +47,25 @@ export const LabelsSelector = ({ boardId }: LabelsSelectorProps) => {
   const [labelToDelete, setLabelToDelete] = useState<Label | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
+  const loadLabels = useCallback(
+    () =>
+      listLabels(boardId)
+        .then(setLabels)
+        .catch(() => setError('Unable to load the labels.')),
+    [boardId],
+  )
+
   useEffect(() => {
-    listLabels(boardId)
-      .then(setLabels)
-      .catch(() => setError('Unable to load the labels.'))
-  }, [boardId])
+    void loadLabels()
+  }, [loadLabels])
+
+  const toggle = () => {
+    // Reload on opening: card counts change as cards get labelled.
+    if (!open) {
+      void loadLabels()
+    }
+    setOpen((value) => !value)
+  }
 
   useEffect(() => {
     // Stay open while the delete confirmation (rendered outside) is showing.
@@ -92,6 +108,7 @@ export const LabelsSelector = ({ boardId }: LabelsSelectorProps) => {
           : await createLabel(boardId, name, draft.color),
       )
       setDraft(null)
+      onChange?.()
     } catch (requestError) {
       setError((requestError as ApiError).detail ?? 'Unable to save the label.')
     } finally {
@@ -106,6 +123,7 @@ export const LabelsSelector = ({ boardId }: LabelsSelectorProps) => {
     setError('')
     try {
       setLabels(await deleteLabel(boardId, labelToDelete.id))
+      onChange?.()
     } catch {
       setError('Unable to delete the label.')
     } finally {
@@ -170,7 +188,7 @@ export const LabelsSelector = ({ boardId }: LabelsSelectorProps) => {
     <div ref={containerRef} className='sm:relative'>
       <button
         type='button'
-        onClick={() => setOpen((value) => !value)}
+        onClick={toggle}
         className='flex items-center gap-2 rounded-xl border border-[var(--stroke)] bg-white px-4 py-2 text-sm font-semibold text-[var(--navy-dark)] shadow-[var(--shadow)] transition hover:border-[var(--primary-blue)]'
       >
         <span>Labels</span>

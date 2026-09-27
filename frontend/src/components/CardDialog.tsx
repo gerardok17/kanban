@@ -4,11 +4,13 @@ import { useEffect, useEffectEvent, useState, type FormEvent } from 'react'
 import { createPortal } from 'react-dom'
 import clsx from 'clsx'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { LabelChips } from '@/components/LabelChip'
 import { MarkdownContent } from '@/components/MarkdownContent'
 import { RichTextEditor } from '@/components/RichTextEditor'
 import { CARD_DETAILS_MAX_LENGTH, CARD_TITLE_MAX_LENGTH } from '@/lib/cardEditor'
 import { formatDateTime } from '@/lib/dates'
 import type { Card, Column } from '@/lib/kanban'
+import { LABEL_COLORS, labelsOf, type Label } from '@/lib/labels'
 
 export type CardDialogMode = 'create' | 'view' | 'edit'
 
@@ -20,7 +22,9 @@ type CardDialogProps = {
   // new card, where it goes).
   columns: Column[]
   initialColumnId: string
-  onSave: (title: string, details: string, columnId: string) => void
+  // The board's labels: toggled on the card in create and edit, shown in view.
+  labels: Label[]
+  onSave: (title: string, details: string, columnId: string, labelIds: string[]) => void
   onClose: () => void
 }
 
@@ -56,13 +60,14 @@ const CreatedLine = ({ card }: { card?: Card }) => {
   )
 }
 
-// The card's own place: create it, read it in full, or edit it. Labels and
-// per-card messages are meant to live here too.
+// The card's own place: create it, read it in full, or edit it. Per-card
+// messages are meant to live here too.
 export const CardDialog = ({
   initialMode,
   card,
   columns,
   initialColumnId,
+  labels,
   onSave,
   onClose,
 }: CardDialogProps) => {
@@ -72,6 +77,8 @@ export const CardDialog = ({
   const [title, setTitle] = useState(initialTitle)
   const [details, setDetails] = useState(initialDetails)
   const [columnId, setColumnId] = useState(initialColumnId)
+  const initialLabelIds = labelsOf(labels, card?.labelIds).map((label) => label.id)
+  const [labelIds, setLabelIds] = useState(initialLabelIds)
   // The editor normalises the Markdown it loads; compare against that, not the
   // raw stored text, or opening a card would count as a change.
   const [detailsBaseline, setDetailsBaseline] = useState<string | null>(null)
@@ -82,6 +89,8 @@ export const CardDialog = ({
     isEditing &&
     (title !== initialTitle ||
       columnId !== initialColumnId ||
+      labelIds.length !== initialLabelIds.length ||
+      labelIds.some((labelId) => !initialLabelIds.includes(labelId)) ||
       (detailsBaseline !== null && details !== detailsBaseline))
   const canSave =
     title.trim().length > 0 &&
@@ -100,9 +109,14 @@ export const CardDialog = ({
     if (!canSave) {
       return
     }
-    onSave(title.trim(), details.trim(), columnId)
+    onSave(title.trim(), details.trim(), columnId, labelIds)
     onClose()
   }
+
+  const toggleLabel = (labelId: string) =>
+    setLabelIds((ids) =>
+      ids.includes(labelId) ? ids.filter((id) => id !== labelId) : [...ids, labelId],
+    )
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -181,12 +195,37 @@ export const CardDialog = ({
                 <Counter length={title.length} max={CARD_TITLE_MAX_LENGTH} />
               </div>
             </div>
-            <div className='flex justify-end'>
+            <div className='flex flex-wrap items-center justify-between gap-2'>
+              {/* The board's labels: filled when the card has one, outlined when not. */}
+              {labels.length > 0 ? (
+                <div role='group' aria-label='Labels' className='flex flex-wrap gap-1.5'>
+                  {labels.map((label) => {
+                    const applied = labelIds.includes(label.id)
+                    const { hex, text } = LABEL_COLORS[label.color]
+                    return (
+                      <button
+                        key={label.id}
+                        type='button'
+                        onClick={() => toggleLabel(label.id)}
+                        aria-pressed={applied}
+                        className='rounded-full border px-2.5 py-0.5 text-xs font-semibold transition'
+                        style={
+                          applied
+                            ? { backgroundColor: hex, borderColor: hex, color: text }
+                            : { borderColor: hex, color: 'var(--gray-text)' }
+                        }
+                      >
+                        {label.name}
+                      </button>
+                    )
+                  })}
+                </div>
+              ) : null}
               <select
                 value={columnId}
                 onChange={(event) => setColumnId(event.target.value)}
                 aria-label='Status'
-                className='min-w-44 rounded-xl border border-[var(--stroke)] bg-white px-3 py-2 text-sm text-[var(--navy-dark)] outline-none transition focus:border-[var(--primary-blue)]'
+                className='ml-auto min-w-44 rounded-xl border border-[var(--stroke)] bg-white px-3 py-2 text-sm text-[var(--navy-dark)] outline-none transition focus:border-[var(--primary-blue)]'
               >
                 {columns.map((column) => (
                   <option key={column.id} value={column.id}>
@@ -246,6 +285,7 @@ export const CardDialog = ({
                 <p className='text-sm text-black/40'>No description.</p>
               )}
             </div>
+            <LabelChips labels={labelsOf(labels, card?.labelIds)} />
             <div className='flex flex-wrap items-center justify-between gap-x-3 gap-y-2'>
               <CreatedLine card={card} />
               <div className='ml-auto flex gap-2'>

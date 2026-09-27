@@ -18,3 +18,16 @@ export const LABEL_COLOR_KEYS = Object.keys(LABEL_COLORS) as LabelColor[]
 
 // Mirrors LABEL_NAME_MAX_LENGTH in backend/app/main.py, which is the real guard.
 export const LABEL_NAME_MAX_LENGTH = 16
+
+// A board's label, as the API sends it (the board's labels come in palette order).
+export type Label = {
+  id: string
+  name: string
+  color: LabelColor
+  cardCount: number
+}
+
+// A card's labels, in the board's order. Ids of labels the board no longer has
+// are skipped.
+export const labelsOf = (labels: Label[], labelIds: string[] = []) =>
+  labels.filter((label) => labelIds.includes(label.id))

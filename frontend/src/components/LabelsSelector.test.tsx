@@ -1,8 +1,8 @@
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { LabelsSelector } from '@/components/LabelsSelector'
-import { createLabel, deleteLabel, listLabels, updateLabel, type Label } from '@/lib/api'
-import { LABEL_COLOR_KEYS } from '@/lib/labels'
+import { createLabel, deleteLabel, listLabels, updateLabel } from '@/lib/api'
+import { LABEL_COLOR_KEYS, type Label } from '@/lib/labels'
 
 vi.mock('@/lib/api', () => ({
   listLabels: vi.fn(),
@@ -25,13 +25,15 @@ const colorChoices = () =>
 
 describe('LabelsSelector', () => {
   beforeEach(() => {
+    vi.clearAllMocks()
     vi.mocked(listLabels).mockResolvedValue([feature, bug])
   })
 
-  it('lists the board labels with their count', async () => {
+  it('lists the board labels with their count, reloading them on opening', async () => {
     render(<LabelsSelector boardId='board-1' />)
     expect(await screen.findByRole('button', { name: 'Labels 2 ▾' })).toBeInTheDocument()
     await openSelector()
+    expect(listLabels).toHaveBeenCalledTimes(2)
     expect(screen.getAllByRole('listitem').map((row) => row.textContent)).toEqual([
       'Feature',
       'Bug',
@@ -41,7 +43,8 @@ describe('LabelsSelector', () => {
   it('adds a label, offering only the colors no other label uses', async () => {
     const design: Label = { id: 'label-design', name: 'Design', color: 'green', cardCount: 0 }
     vi.mocked(createLabel).mockResolvedValue([feature, design, bug])
-    render(<LabelsSelector boardId='board-1' />)
+    const onChange = vi.fn()
+    render(<LabelsSelector boardId='board-1' onChange={onChange} />)
     await openSelector()
     await userEvent.click(screen.getByRole('button', { name: '+ New label' }))
 
@@ -52,6 +55,8 @@ describe('LabelsSelector', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Add' }))
     expect(createLabel).toHaveBeenCalledWith('board-1', 'Design', 'green')
     expect(await screen.findByText('Design')).toBeInTheDocument()
+    // The board is told, so its cards pick up the change.
+    expect(onChange).toHaveBeenCalled()
   })
 
   it('edits a label in place, where it keeps its own color', async () => {

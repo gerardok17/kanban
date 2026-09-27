@@ -1,3 +1,5 @@
+import type { Label } from "@/lib/labels";
+
 export type Card = {
   id: string;
   title: string;
@@ -6,6 +8,7 @@ export type Card = {
   // that user is deleted, and when the card was created.
   createdBy?: string | null;
   createdAt?: string;
+  labelIds?: string[];
 };
 
 export type Column = {
@@ -17,6 +20,8 @@ export type Column = {
 export type BoardData = {
   columns: Column[];
   cards: Record<string, Card>;
+  // The board's labels (the demo board has none).
+  labels?: Label[];
 };
 
 export const initialData: BoardData = {

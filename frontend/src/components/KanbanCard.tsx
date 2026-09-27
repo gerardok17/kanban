@@ -4,10 +4,14 @@ import { CSS } from '@dnd-kit/utilities'
 import clsx from 'clsx'
 import type { Card } from '@/lib/kanban'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { LabelChips } from '@/components/LabelChip'
 import { MarkdownContent } from '@/components/MarkdownContent'
+import type { Label } from '@/lib/labels'
 
 type KanbanCardProps = {
   card: Card
+  // The card's labels, shown between its description and its actions.
+  labels: Label[]
   onView: (cardId: string) => void
   onEdit: (cardId: string) => void
   onDelete: (cardId: string) => void
@@ -18,6 +22,7 @@ type KanbanCardProps = {
 
 export const KanbanCard = ({
   card,
+  labels,
   onView,
   onEdit,
   onDelete,
@@ -61,6 +66,7 @@ export const KanbanCard = ({
           <MarkdownContent markdown={card.details} className='mt-2 line-clamp-5' />
         ) : null}
       </div>
+      <LabelChips labels={labels} className='mt-3' />
       <div className='mt-3 flex items-center justify-between gap-1 border-t border-black/5 pt-3'>
         <div className='flex items-center gap-1'>
           {canComplete && onComplete ? (

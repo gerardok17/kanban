@@ -1,5 +1,5 @@
 import type { BoardData } from "@/lib/kanban";
-import type { LabelColor } from "@/lib/labels";
+import type { Label, LabelColor } from "@/lib/labels";
 
 // `detail` carries the server's human-readable reason when it sends one (e.g.
 // why a board could not be shared), so the UI can show it as-is.
@@ -38,17 +38,29 @@ export const renameColumn = (columnId: string, title: string) =>
     body: JSON.stringify({ title }),
   });
 
-export const addCard = (columnId: string, title: string, details: string) =>
+export const addCard = (
+  columnId: string,
+  title: string,
+  details: string,
+  labelIds: string[],
+) =>
   request<BoardData>("/api/board/cards", {
     method: "POST",
-    body: JSON.stringify({ columnId, title, details }),
+    body: JSON.stringify({ columnId, title, details, labelIds }),
   });
 
 // `columnId` is the card's status: a different column moves the card to its end.
-export const editCard = (cardId: string, title: string, details: string, columnId: string) =>
+// `labelIds` replaces the card's labels.
+export const editCard = (
+  cardId: string,
+  title: string,
+  details: string,
+  columnId: string,
+  labelIds: string[],
+) =>
   request<BoardData>(`/api/board/cards/${cardId}`, {
     method: "PATCH",
-    body: JSON.stringify({ title, details, columnId }),
+    body: JSON.stringify({ title, details, columnId, labelIds }),
   });
 
 export const deleteCard = (cardId: string) =>
@@ -122,12 +134,6 @@ export const unshareBoard = (boardId: string, userId: string) =>
 
 // A board's labels, in palette order. Everyone who can open the board manages
 // them; each change returns the refreshed list.
-export type Label = {
-  id: string;
-  name: string;
-  color: LabelColor;
-  cardCount: number;
-};
 
 export const listLabels = (boardId: string) =>
   request<Label[]>(`/api/boards/${boardId}/labels`);

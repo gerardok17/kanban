@@ -1,4 +1,5 @@
-import { LABEL_COLORS, type LabelColor } from '@/lib/labels'
+import clsx from 'clsx'
+import { LABEL_COLORS, type Label, type LabelColor } from '@/lib/labels'
 
 type LabelChipProps = { name: string; color: LabelColor }
 
@@ -11,3 +12,15 @@ export const LabelChip = ({ name, color }: LabelChipProps) => (
     {name}
   </span>
 )
+
+type LabelChipsProps = { labels: Label[]; className?: string }
+
+// A card's labels in a row that wraps; nothing when it has none.
+export const LabelChips = ({ labels, className }: LabelChipsProps) =>
+  labels.length > 0 ? (
+    <div className={clsx('flex flex-wrap gap-1.5', className)}>
+      {labels.map((label) => (
+        <LabelChip key={label.id} name={label.name} color={label.color} />
+      ))}
+    </div>
+  ) : null

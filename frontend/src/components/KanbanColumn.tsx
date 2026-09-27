@@ -2,11 +2,14 @@ import clsx from "clsx";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import type { Card, Column } from "@/lib/kanban";
+import { labelsOf, type Label } from "@/lib/labels";
 import { KanbanCard } from "@/components/KanbanCard";
 
 type KanbanColumnProps = {
   column: Column;
   cards: Card[];
+  // The board's labels, to show the ones each card carries.
+  labels: Label[];
   onRename: (columnId: string, title: string) => void;
   // Open the card dialog: to create a card in this column, or to view/edit one.
   onAddCard: (columnId: string) => void;
@@ -21,6 +24,7 @@ type KanbanColumnProps = {
 export const KanbanColumn = ({
   column,
   cards,
+  labels,
   onRename,
   onAddCard,
   onViewCard,
@@ -77,6 +81,7 @@ export const KanbanColumn = ({
             <KanbanCard
               key={card.id}
               card={card}
+              labels={labelsOf(labels, card.labelIds)}
               onView={onViewCard}
               onEdit={onEditCard}
               onDelete={(cardId) => onDeleteCard(column.id, cardId)}
