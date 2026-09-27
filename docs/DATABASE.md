@@ -14,7 +14,9 @@ collections, with `column.cardIds` preserving card order.
 
 ## Relational model
 
-- `users`: `id` primary key, unique `username`, bcrypt `password_hash`, and `created_at`.
+- `users`: `id` primary key, unique `username` (mirrors the email), unique `email`
+  (the Google sign-in allowlist key), nullable `password_hash` (unused since sign-in
+  became Google-only), `role` (`admin` or `user`, default `user`), and `created_at`.
 - `boards`: `id` primary key, `user_id` foreign key to `users`, `title`,
   `position`, `created_at`, and `updated_at`. There is no unique constraint on
   `user_id` — a user can own multiple boards.
@@ -27,9 +29,10 @@ collections, with `column.cardIds` preserving card order.
   constraints. This is the relational equivalent of `column.cardIds` and makes
   moving a card an explicit ordered update.
 
-The seed user has a stable internal ID (`user-gerardok17`) and username
-`gerardok17`, with a bcrypt-hashed password stored in `password_hash`. Future
-users can be added without changing board ownership or the API shape.
+The seed user comes from `SEED_EMAIL`: a Google-only user (no password) with one
+empty starter board. The first user (oldest `created_at`) is the owner: always an
+`admin` (restored on every startup) and never deletable. Admins manage the other
+users; `role` is an app-level role, separate from any per-board permission.
 
 ## Initialization and versioning
 
@@ -38,14 +41,16 @@ tables if absent (InnoDB, `utf8mb4`, `DATETIME` timestamps), and record the sche
 version. Seed the user and one empty starter board only when those records do not
 exist. Do not reseed or overwrite user changes on later startups.
 
-Schema version `1` is the contract currently proposed. Future migrations should
-be additive where possible, recorded in a migrations table, and applied in
-order before serving requests.
+Migrations are additive, recorded in `schema_migrations`, and applied in order
+before serving requests: `1` the base schema, `2` `cards.completed_at`, `3`
+`users.email` with a nullable `password_hash` (Google sign-in), and `4` `users.role`.
 
 ## Mutation rules
 
 - Every board read or write resolves the board through the authenticated user;
   client-supplied ownership IDs are never trusted.
+- User administration (list, add, change role, delete) is admin-only; the role is
+  read from the database on every request. Deleting a user also ends their sessions.
 - IDs must be non-empty and unique within their entity type.
 - Column positions and card positions are zero-based, contiguous integers when
   a board is returned.

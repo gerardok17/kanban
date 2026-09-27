@@ -26,6 +26,10 @@ DB_CONFIG: dict[str, Any] = {
 # default, previously guessable, account ever ships).
 SEED_EMAIL = os.getenv("SEED_EMAIL", "").strip()
 
+# App-level roles (who administers users) — separate from any future per-board
+# permissions.
+USER_ROLES = ("admin", "user")
+
 # Default columns every new board starts with (renameable in the UI).
 DEFAULT_COLUMNS = [
     ("col-backlog", "Backlog", 0),
@@ -116,6 +120,12 @@ SCHEMA_STATEMENTS = [
     """
     ALTER TABLE users ADD UNIQUE INDEX IF NOT EXISTS uq_users_email (email)
     """,
+    # Migration v4: app-level roles. `admin` manages users; `user` only uses the
+    # boards. Existing and new users default to `user`; the first user is made
+    # an admin on every startup (see initialize_database).
+    """
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(16) NOT NULL DEFAULT 'user'
+    """,
 ]
 
 
@@ -174,6 +184,11 @@ def initialize_database() -> None:
             "INSERT IGNORE INTO schema_migrations(version, applied_at) VALUES (3, %s)",
             (utc_now(),),
         )
+        _exec(
+            connection,
+            "INSERT IGNORE INTO schema_migrations(version, applied_at) VALUES (4, %s)",
+            (utc_now(),),
+        )
         # Seed a single Google-only owner, keyed on the allowlist email. No user
         # is seeded without SEED_EMAIL, so the public repo never ships a default
         # (previously guessable) account. Keyed on email — not a username — so an
@@ -187,6 +202,11 @@ def initialize_database() -> None:
             )
             if existing is None:
                 _seed_initial(connection, SEED_EMAIL)
+        # The first user is the owner: always an admin (restored here on every
+        # start, so the owner can never be locked out) and never deletable.
+        first_user_id = _first_user_id(connection)
+        if first_user_id is not None:
+            _exec(connection, "UPDATE users SET role = 'admin' WHERE id = %s", (first_user_id,))
 
 
 def _seed_initial(connection: Connection, email: str) -> None:
@@ -223,13 +243,14 @@ def list_users() -> list[dict[str, Any]]:
     with connect() as connection:
         users = _all(
             connection,
-            "SELECT id, username, email, created_at FROM users ORDER BY created_at, username",
+            "SELECT id, username, email, role, created_at FROM users ORDER BY created_at, username",
         )
     return [
         {
             "id": user["id"],
             "username": user["username"],
             "email": user["email"],
+            "role": user["role"],
             "created_at": user["created_at"].isoformat() if user["created_at"] else None,
         }
         for user in users
@@ -271,7 +292,14 @@ def email_for_username(username: str) -> str | None:
     return row["email"] if row and row["email"] else None
 
 
-def create_allowlisted_user(user_id: str, email: str) -> None:
+def role_for_username(username: str) -> str | None:
+    """The app role of a signed-in username, or None if the user no longer exists."""
+    with connect() as connection:
+        row = _one(connection, "SELECT role FROM users WHERE username = %s", (username,))
+    return row["role"] if row else None
+
+
+def create_allowlisted_user(user_id: str, email: str, role: str = "user") -> None:
     """Add an email to the allowlist. The user signs in with Google only, so no
     password is stored; username mirrors the email so board ownership works, and
     a starter board is created just like the seed user."""
@@ -287,8 +315,8 @@ def create_allowlisted_user(user_id: str, email: str) -> None:
         now = utc_now()
         _exec(
             connection,
-            "INSERT INTO users(id, username, password_hash, email, created_at) VALUES (%s, %s, NULL, %s, %s)",
-            (user_id, normalized, normalized, now),
+            "INSERT INTO users(id, username, password_hash, email, role, created_at) VALUES (%s, %s, NULL, %s, %s, %s)",
+            (user_id, normalized, normalized, role, now),
         )
         board_id = f"board-{token_urlsafe(12)}"
         _exec(
@@ -306,15 +334,27 @@ def create_allowlisted_user(user_id: str, email: str) -> None:
             )
 
 
-def delete_user(user_id: str) -> None:
+def set_user_role(user_id: str, role: str) -> None:
     with connect() as connection:
         target = _one(connection, "SELECT id FROM users WHERE id = %s", (user_id,))
+        if target is None:
+            raise ValueError("User not found")
+        if user_id == _first_user_id(connection) and role != "admin":
+            raise ValueError("The first user is always an admin")
+        _exec(connection, "UPDATE users SET role = %s WHERE id = %s", (role, user_id))
+
+
+def delete_user(user_id: str) -> str:
+    """Delete a user and return their username (so their sessions can be revoked)."""
+    with connect() as connection:
+        target = _one(connection, "SELECT id, username FROM users WHERE id = %s", (user_id,))
         if target is None:
             raise ValueError("User not found")
         if user_id == _first_user_id(connection):
             raise ValueError("The first user cannot be deleted")
         # Boards (and their columns/cards) cascade-delete via the FK.
         _exec(connection, "DELETE FROM users WHERE id = %s", (user_id,))
+    return target["username"]
 
 
 # --- Ownership helpers -----------------------------------------------------

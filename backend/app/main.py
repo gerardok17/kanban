@@ -1,5 +1,6 @@
 import os
 from contextlib import asynccontextmanager
+from typing import Literal
 from pathlib import Path
 from secrets import token_urlsafe
 
@@ -94,8 +95,17 @@ class BoardRenameRequest(BaseModel):
     title: str
 
 
+# App-level roles; mirrors database.USER_ROLES.
+UserRole = Literal["admin", "user"]
+
+
 class UserCreateRequest(BaseModel):
     email: str
+    role: UserRole = "user"
+
+
+class UserRoleRequest(BaseModel):
+    role: UserRole
 
 
 def require_session(session: str | None) -> str:
@@ -104,10 +114,28 @@ def require_session(session: str | None) -> str:
     return sessions[session]
 
 
+def require_admin(session: str | None) -> str:
+    # The role is read from the database on every request, so a role change or a
+    # deleted user takes effect immediately rather than when the session expires.
+    username = require_session(session)
+    if database.role_for_username(username) != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admins only")
+    return username
+
+
+def revoke_sessions(username: str) -> None:
+    for token in [token for token, owner in sessions.items() if owner == username]:
+        sessions.pop(token, None)
+
+
 @app.get("/api/auth/session")
 def get_session(session: str | None = Cookie(default=None)) -> dict[str, str | None]:
     username = require_session(session)
-    return {"username": username, "email": database.email_for_username(username)}
+    return {
+        "username": username,
+        "email": database.email_for_username(username),
+        "role": database.role_for_username(username),
+    }
 
 
 @app.post("/api/auth/logout")
@@ -168,9 +196,10 @@ def read_health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+# User administration (the Google sign-in allowlist) is admin-only.
 @app.get("/api/users")
 def list_users(session: str | None = Cookie(default=None)) -> list[dict]:
-    require_session(session)
+    require_admin(session)
     return database.list_users()
 
 
@@ -179,15 +208,29 @@ def create_user(
     payload: UserCreateRequest,
     session: str | None = Cookie(default=None),
 ) -> list[dict]:
-    require_session(session)
+    require_admin(session)
     email = payload.email.strip().lower()
     if not email or "@" not in email:
         raise HTTPException(status_code=422, detail="A valid email is required")
     user_id = f"user-{token_urlsafe(12)}"
     try:
-        database.create_allowlisted_user(user_id, email)
+        database.create_allowlisted_user(user_id, email, payload.role)
     except ValueError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
+    return database.list_users()
+
+
+@app.patch("/api/users/{user_id}")
+def change_user_role(
+    user_id: str,
+    payload: UserRoleRequest,
+    session: str | None = Cookie(default=None),
+) -> list[dict]:
+    require_admin(session)
+    try:
+        database.set_user_role(user_id, payload.role)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
     return database.list_users()
 
 
@@ -196,11 +239,13 @@ def delete_user(
     user_id: str,
     session: str | None = Cookie(default=None),
 ) -> list[dict]:
-    require_session(session)
+    require_admin(session)
     try:
-        database.delete_user(user_id)
+        username = database.delete_user(user_id)
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
+    # Sign the deleted user out everywhere instead of leaving a dead session.
+    revoke_sessions(username)
     return database.list_users()
 
 

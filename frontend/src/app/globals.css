@@ -200,7 +200,8 @@ body {
   color: var(--gray-text);
 }
 
-.login-form input {
+.login-form input,
+.login-form select {
   width: 100%;
   padding: 0.9rem 1rem;
   border-radius: 0.5rem;
@@ -210,7 +211,8 @@ body {
   transition: all 0.2s ease;
 }
 
-.login-form input:focus {
+.login-form input:focus,
+.login-form select:focus {
   outline: none;
   border-color: var(--primary-blue);
   box-shadow: 0 0 0 4px rgba(0, 156, 218, 0.1);

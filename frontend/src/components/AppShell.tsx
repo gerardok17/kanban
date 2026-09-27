@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { BoardsView } from '@/components/BoardsView'
 import { DashboardView } from '@/components/DashboardView'
 import { UsersView } from '@/components/UsersView'
-import { getSession } from '@/lib/api'
+import { getSession, type Role } from '@/lib/api'
 
 const logo = './mission-board-logo.png'
 
@@ -18,6 +18,7 @@ type AppShellProps = {
 export const AppShell = ({ onLogout, remote = false }: AppShellProps) => {
   const [view, setView] = useState<View>('boards')
   const [email, setEmail] = useState('')
+  const [role, setRole] = useState<Role | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -26,9 +27,16 @@ export const AppShell = ({ onLogout, remote = false }: AppShellProps) => {
       return
     }
     getSession()
-      .then((session) => setEmail(session.email ?? session.username))
+      .then((session) => {
+        setEmail(session.email ?? session.username)
+        setRole(session.role)
+      })
       .catch(() => {})
   }, [remote])
+
+  // User administration is for admins only (the API enforces it too). The demo
+  // mode has no session and keeps showing the page, as before.
+  const isAdmin = !remote || role === 'admin'
 
   // Close the account menu on an outside click or Escape.
   useEffect(() => {
@@ -103,17 +111,19 @@ export const AppShell = ({ onLogout, remote = false }: AppShellProps) => {
               </button>
               {menuOpen ? (
                 <div className='admin-banner-usermenu-dropdown' role='menu'>
-                  <button
-                    type='button'
-                    role='menuitem'
-                    className='admin-banner-usermenu-item'
-                    onClick={() => {
-                      setView('users')
-                      setMenuOpen(false)
-                    }}
-                  >
-                    Users
-                  </button>
+                  {isAdmin ? (
+                    <button
+                      type='button'
+                      role='menuitem'
+                      className='admin-banner-usermenu-item'
+                      onClick={() => {
+                        setView('users')
+                        setMenuOpen(false)
+                      }}
+                    >
+                      Users
+                    </button>
+                  ) : null}
                   {onLogout ? (
                     <button
                       type='button'
@@ -141,7 +151,7 @@ export const AppShell = ({ onLogout, remote = false }: AppShellProps) => {
           </main>
         ) : null}
 
-        {view === 'users' ? (
+        {view === 'users' && isAdmin ? (
           <main className='mx-auto max-w-[1500px] px-6 pb-16 pt-10'>
             <UsersView remote={remote} />
           </main>
