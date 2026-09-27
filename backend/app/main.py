@@ -95,6 +95,10 @@ class BoardRenameRequest(BaseModel):
     title: str
 
 
+class BoardShareRequest(BaseModel):
+    email: str
+
+
 # App-level roles; mirrors database.USER_ROLES.
 UserRole = Literal["admin", "user"]
 
@@ -293,6 +297,8 @@ def rename_board(
         raise HTTPException(status_code=422, detail="Board title is required")
     try:
         database.rename_board(username, board_id, title)
+    except database.OwnerOnlyError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
     except ValueError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
     return database.get_board(username, board_id)
@@ -306,9 +312,57 @@ def delete_board(
     username = require_session(session)
     try:
         database.delete_board(username, board_id)
+    except database.OwnerOnlyError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     return database.list_boards(username)
+
+
+# Sharing: anyone who can open a board sees who has access; only the owner can
+# share it or stop sharing it.
+@app.get("/api/boards/{board_id}/members")
+def list_board_members(
+    board_id: str,
+    session: str | None = Cookie(default=None),
+) -> list[dict]:
+    username = require_session(session)
+    try:
+        return database.list_board_members(username, board_id)
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@app.post("/api/boards/{board_id}/members", status_code=201)
+def share_board(
+    board_id: str,
+    payload: BoardShareRequest,
+    session: str | None = Cookie(default=None),
+) -> list[dict]:
+    username = require_session(session)
+    try:
+        return database.share_board(username, board_id, payload.email)
+    except database.OwnerOnlyError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except database.ShareError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@app.delete("/api/boards/{board_id}/members/{user_id}")
+def unshare_board(
+    board_id: str,
+    user_id: str,
+    session: str | None = Cookie(default=None),
+) -> list[dict]:
+    username = require_session(session)
+    try:
+        return database.unshare_board(username, board_id, user_id)
+    except database.OwnerOnlyError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
 
 
 @app.get("/api/board")

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { KanbanBoard } from '@/components/KanbanBoard'
 import { BoardSelector } from '@/components/BoardSelector'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { SharedWithSelector } from '@/components/SharedWithSelector'
 import {
   createBoard,
   deleteBoard,
@@ -127,13 +128,21 @@ export const BoardsView = ({ onLogout, remote = false }: BoardsViewProps) => {
   return (
     <>
       <div className='mx-auto flex max-w-[1500px] items-center justify-end gap-3 px-6 pt-4'>
+        {activeBoard ? (
+          <SharedWithSelector
+            key={activeBoard.id}
+            boardId={activeBoard.id}
+            isOwner={activeBoard.isOwner}
+          />
+        ) : null}
         <BoardSelector
           boards={boards}
           activeBoardId={activeBoardId}
           onSelect={handleSelect}
           onCreate={handleCreate}
         />
-        {cardCount === 0 ? (
+        {/* Only the owner deletes a board, and only once it has no cards. */}
+        {activeBoard?.isOwner && cardCount === 0 ? (
           <button
             type='button'
             onClick={() => setConfirmDelete(true)}
@@ -166,7 +175,7 @@ export const BoardsView = ({ onLogout, remote = false }: BoardsViewProps) => {
       <ConfirmDialog
         open={confirmDelete}
         title='Delete board'
-        message={`"${activeBoard?.title ?? 'This board'}" will be permanently deleted.`}
+        message={`"${activeBoard?.title ?? 'This board'}" will be permanently deleted for everyone it is shared with, along with its completed cards.`}
         confirmLabel='Delete'
         cancelLabel='Cancel'
         onConfirm={handleConfirmDelete}

@@ -3,9 +3,9 @@ import type { BoardSummary } from "@/lib/api";
 
 describe("resolveBoardId", () => {
   const boards: BoardSummary[] = [
-    { id: "board-general", title: "General", position: 0 },
-    { id: "board-nava", title: "Nava Benefits", position: 1 },
-    { id: "board-hyperion", title: "Hyperion", position: 2 },
+    { id: "board-general", title: "General", position: 0, isOwner: true, ownerEmail: "owner@example.com" },
+    { id: "board-nava", title: "Nava Benefits", position: 1, isOwner: true, ownerEmail: "owner@example.com" },
+    { id: "board-hyperion", title: "Hyperion", position: 2, isOwner: true, ownerEmail: "owner@example.com" },
   ];
 
   it("resolves a numeric value as a zero-based index", () => {

@@ -4,7 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-A single-user Kanban project-management MVP built while following Ed Donner's "AI Coder" course.
+A Kanban project-management app built while following Ed Donner's "AI Coder" course: Google sign-in
+with an admin-managed allowlist, and boards their owners can share with other users.
 It is a monorepo with a Next.js frontend, a FastAPI backend, and Docker packaging. The backend
 serves both the API and the statically exported frontend from one container on port `8000`.
 
@@ -24,10 +25,13 @@ model) and `SETUP.md`. Each top-level directory also has an `AGENTS.md` with loc
 
 Packaged with `uv` (the Docker image installs with `uv pip install`). Locally, use `uv run --extra test pytest`
 or a venv with `pip install -e ".[test]"` then `pytest`. `pyproject.toml` sets `pythonpath` and `testpaths`,
-so `pytest` alone discovers `tests/`. Single test: `pytest tests/test_main.py::test_health_route_returns_ok`.
+so `pytest` alone discovers `tests/`. Single test: `pytest tests/test_user_roles.py::test_admin_changes_a_role`.
 
 The backend connects to MariaDB using the `MYSQL_*` variables from `.env` (see `.env.example`).
-The backend test suite is skipped unless `KANBAN_TEST_DATABASE` points at a disposable MariaDB test database.
+Most tests need no database. `tests/test_board_sharing.py` runs against a disposable MariaDB database that it
+creates and drops: set `KANBAN_TEST_DATABASE` to a name ending in `_test` (e.g. inside the dev stack,
+`docker exec kanban-backend-1 sh -c "cd /app/backend && KANBAN_TEST_DATABASE=kanbanpmdb_test python -m pytest -q"`).
+The SQLite-era `tests/test_main.py` is skipped until it is ported.
 
 ### Docker (run from repo root)
 
@@ -54,7 +58,8 @@ Keep this split intact. Presentational components must not make network calls di
 `app/main.py` defines all routes. Auth checks the username/password against the `users` table
 (bcrypt, via `database.authenticate`) and mints an in-memory session token (`sessions: dict[str, str]`
 mapping token to username, not persisted, cleared on restart) stored in an httponly cookie.
-Every board route calls `require_session`, then resolves the board through the authenticated username -
+Every board route calls `require_session`, then resolves the board through the authenticated user (its owner or a
+user it is shared with; only the owner may share, rename, or delete it) -
 client-supplied ownership IDs are never trusted. Mutation routes return the full board in the same shape
 as `GET /api/board`.
 

@@ -78,7 +78,17 @@ export const BoardSelector = ({
                   }`}
                 >
                   <span className='truncate'>{board.title}</span>
-                  {board.id === activeBoardId ? <span>✓</span> : null}
+                  <span className='flex shrink-0 items-center gap-2'>
+                    {board.isOwner ? null : (
+                      <span
+                        className='rounded-full bg-[var(--surface)] px-2 py-0.5 text-xs font-semibold text-[var(--gray-text)]'
+                        title={`Shared by ${board.ownerEmail}`}
+                      >
+                        Shared
+                      </span>
+                    )}
+                    {board.id === activeBoardId ? <span>✓</span> : null}
+                  </span>
                 </button>
               </li>
             ))}
