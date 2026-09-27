@@ -23,7 +23,9 @@ collections, with `column.cardIds` preserving card order.
 - `columns`: `id` primary key, `board_id` foreign key to `boards`, `title`, and
   `position`. A unique `(board_id, position)` constraint preserves column order.
 - `cards`: `id` primary key, `board_id` foreign key to `boards`, `title`,
-  nullable `details`, `created_at`, and `updated_at`.
+  nullable `details`, nullable `created_by` (foreign key to `users`: who created
+  the card, set to `NULL` when that user is deleted so the card stays on its
+  board), `created_at`, `updated_at`, and nullable `completed_at`.
 - `board_shares`: `board_id` and `user_id` (composite primary key, both foreign
   keys, cascading), and `created_at`. The users a board is shared with;
   `boards.user_id` remains its one owner.
@@ -44,10 +46,14 @@ tables if absent (InnoDB, `utf8mb4`, `DATETIME` timestamps), and record the sche
 version. Seed the user and one empty starter board only when those records do not
 exist. Do not reseed or overwrite user changes on later startups.
 
+Timestamps are stored in UTC and returned as ISO 8601 strings with an explicit
+`+00:00` offset, so browsers show them in the viewer's local time.
+
 Migrations are additive, recorded in `schema_migrations`, and applied in order
 before serving requests: `1` the base schema, `2` `cards.completed_at`, `3`
-`users.email` with a nullable `password_hash` (Google sign-in), `4` `users.role`, and
-`5` `board_shares`.
+`users.email` with a nullable `password_hash` (Google sign-in), `4` `users.role`,
+`5` `board_shares`, and `6` `cards.created_by`. Migration 6 credits existing cards
+to their board's owner, once; afterwards a `NULL` creator means a deleted user.
 
 ## Mutation rules
 

@@ -1,4 +1,5 @@
 import os
+from datetime import datetime, timedelta, timezone
 from secrets import token_hex
 
 import pymysql
@@ -67,6 +68,16 @@ def add_card(board_id: str, title: str) -> str:
         "/api/board/cards", json={"columnId": f"{board_id}-col-backlog", "title": title}
     ).json()
     return next(card_id for card_id, card in board["cards"].items() if card["title"] == title)
+
+
+def card_creators(board_id: str) -> dict[str, str | None]:
+    cards = client.get(f"/api/boards/{board_id}").json()["cards"].values()
+    return {card["title"]: card["createdBy"] for card in cards}
+
+
+def run_sql(sql: str, params: tuple = ()) -> None:
+    with database.connect() as connection, connection.cursor() as cursor:
+        cursor.execute(sql, params)
 
 
 def test_a_board_is_private_until_shared() -> None:
@@ -189,3 +200,41 @@ def test_deleting_users_cleans_up_shares_and_owned_boards() -> None:
     database.delete_user(member_id(board_id, owner))
     as_user(second)
     assert board_id not in [board["id"] for board in client.get("/api/boards").json()]
+
+
+def test_cards_record_who_created_them_and_when() -> None:
+    owner, member = make_user("owner"), make_user("member")
+    board_id = own_board(owner)
+    client.post(f"/api/boards/{board_id}/members", json={"email": member})
+    add_card(board_id, "Owner card")
+    as_user(member)
+    card_id = add_card(board_id, "Member card")
+    assert card_creators(board_id) == {"Owner card": owner, "Member card": member}
+
+    # An explicit UTC offset, so browsers convert it to local time.
+    created_at = datetime.fromisoformat(
+        client.get(f"/api/boards/{board_id}").json()["cards"][card_id]["createdAt"]
+    )
+    assert created_at.utcoffset() == timedelta(0)
+    assert abs(datetime.now(timezone.utc) - created_at) < timedelta(minutes=1)
+
+
+def test_the_v6_backfill_runs_only_once() -> None:
+    owner, member = make_user("owner"), make_user("member")
+    board_id = own_board(owner)
+    client.post(f"/api/boards/{board_id}/members", json={"email": member})
+    as_user(member)
+    add_card(board_id, "By a deleted user")
+    database.delete_user(member_id(board_id, member))
+
+    # The card stays on the board, and later startups never credit it to anyone.
+    database.initialize_database()
+    as_user(owner)
+    assert card_creators(board_id) == {"By a deleted user": None}
+
+    # On a database from before v6, existing cards go to the board's owner.
+    legacy_id = add_card(board_id, "From before v6")
+    run_sql("UPDATE cards SET created_by = NULL WHERE id = %s", (legacy_id,))
+    run_sql("DELETE FROM schema_migrations WHERE version = 6")
+    database.initialize_database()
+    assert card_creators(board_id)["From before v6"] == owner

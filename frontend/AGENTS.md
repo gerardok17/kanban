@@ -21,7 +21,7 @@ This directory contains the existing Next.js Kanban Studio frontend. It is curre
 - `src/components/KanbanColumn.tsx` renders a droppable column, its sortable cards, and the "Add a card" button.
 - `src/components/KanbanCard.tsx` renders a sortable card: title, a 5-line Markdown preview, and view / edit / delete actions.
 - `src/components/KanbanCardPreview.tsx` renders the drag overlay.
-- `src/components/CardDialog.tsx` is the card dialog (create / view / edit), opened by `KanbanBoard`; it closes only with Esc, the X, or Cancel/Close.
+- `src/components/CardDialog.tsx` is the card dialog (create / view / edit), opened by `KanbanBoard`; it closes only with Esc, the X, or Cancel/Close. View and edit show who created the card and when, in local time (`src/lib/dates.ts`).
 - `src/components/RichTextEditor.tsx` is the Tiptap description editor; `src/lib/cardEditor.ts` holds its extensions and the card field limits.
 - `src/components/UsersView.tsx` is the admin-only user administration page (roles, add, delete); `src/components/AddUserDialog.tsx` adds an allowlisted email with its role. `AppShell` shows Users only to admins.
 - `src/components/SharedWithSelector.tsx` sits left of `BoardSelector`: who a board is shared with (owner first), with share/unshare for the owner and a read-only list for everyone else. `BoardSelector` tags boards shared with you.

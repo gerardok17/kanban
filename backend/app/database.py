@@ -147,12 +147,28 @@ SCHEMA_STATEMENTS = [
         INDEX idx_board_shares_user (user_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     """,
+    # Migration v6: who created each card. NULL once that user is deleted (the
+    # card stays on its board). Existing cards are backfilled once, in
+    # initialize_database.
+    """
+    ALTER TABLE cards ADD COLUMN IF NOT EXISTS created_by VARCHAR(64) NULL
+    """,
+    """
+    ALTER TABLE cards ADD CONSTRAINT fk_cards_created_by FOREIGN KEY IF NOT EXISTS (created_by)
+        REFERENCES users(id) ON DELETE SET NULL
+    """,
 ]
 
 
 def utc_now() -> datetime:
     """Naive UTC datetime, stored directly in DATETIME columns."""
     return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def iso_utc(value: datetime | None) -> str | None:
+    """ISO string for a stored (naive UTC) DATETIME. The explicit offset matters:
+    browsers read an ISO string without one as local time."""
+    return value.replace(tzinfo=timezone.utc).isoformat() if value else None
 
 
 @contextmanager
@@ -215,6 +231,23 @@ def initialize_database() -> None:
             "INSERT IGNORE INTO schema_migrations(version, applied_at) VALUES (5, %s)",
             (utc_now(),),
         )
+        # v6 credits existing cards to their board's owner, the only one who could
+        # add cards before boards were shared. It runs once: afterwards a NULL
+        # creator means that user was deleted, so it must never be refilled.
+        if _one(connection, "SELECT version FROM schema_migrations WHERE version = 6") is None:
+            _exec(
+                connection,
+                """
+                UPDATE cards JOIN boards ON boards.id = cards.board_id
+                SET cards.created_by = boards.user_id
+                WHERE cards.created_by IS NULL
+                """,
+            )
+            _exec(
+                connection,
+                "INSERT INTO schema_migrations(version, applied_at) VALUES (6, %s)",
+                (utc_now(),),
+            )
         # Seed a single Google-only owner, keyed on the allowlist email. No user
         # is seeded without SEED_EMAIL, so the public repo never ships a default
         # (previously guessable) account. Keyed on email — not a username — so an
@@ -277,7 +310,7 @@ def list_users() -> list[dict[str, Any]]:
             "username": user["username"],
             "email": user["email"],
             "role": user["role"],
-            "created_at": user["created_at"].isoformat() if user["created_at"] else None,
+            "created_at": iso_utc(user["created_at"]),
         }
         for user in users
     ]
@@ -672,7 +705,13 @@ def _read_board(connection: Connection, board_id: str) -> dict[str, Any]:
     )
     cards = _all(
         connection,
-        "SELECT id, title, details FROM cards WHERE board_id = %s AND completed_at IS NULL",
+        """
+        SELECT cards.id, cards.title, cards.details, cards.created_at,
+            COALESCE(creators.email, creators.username) AS created_by
+        FROM cards
+        LEFT JOIN users AS creators ON creators.id = cards.created_by
+        WHERE cards.board_id = %s AND cards.completed_at IS NULL
+        """,
         (board_id,),
     )
     completed = _all(
@@ -710,6 +749,9 @@ def _read_board(connection: Connection, board_id: str) -> dict[str, Any]:
                 "id": card["id"],
                 "title": card["title"],
                 "details": card["details"] or "",
+                # The creator's email; None once that user is deleted.
+                "createdBy": card["created_by"],
+                "createdAt": iso_utc(card["created_at"]),
             }
             for card in cards
         },
@@ -717,9 +759,7 @@ def _read_board(connection: Connection, board_id: str) -> dict[str, Any]:
             {
                 "id": card["id"],
                 "title": card["title"],
-                "completedAt": card["completed_at"].isoformat()
-                if card["completed_at"]
-                else None,
+                "completedAt": iso_utc(card["completed_at"]),
             }
             for card in completed
         ],
@@ -758,8 +798,11 @@ def create_card(
         now = utc_now()
         _exec(
             connection,
-            "INSERT INTO cards(id, board_id, title, details, created_at, updated_at) VALUES (%s, %s, %s, %s, %s, %s)",
-            (card_id, board_id, title, details, now, now),
+            """
+            INSERT INTO cards(id, board_id, title, details, created_by, created_at, updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """,
+            (card_id, board_id, title, details, _user_id(connection, username), now, now),
         )
         next_position = _one(
             connection,
