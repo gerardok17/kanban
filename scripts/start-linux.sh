@@ -8,6 +8,7 @@ docker network connect homelab-net homelab-db 2>/dev/null || true
 docker build -t project-management-mvp .
 docker rm -f project-management-mvp 2>/dev/null || true
 docker run -d --name project-management-mvp \
+  --restart unless-stopped \
   --network homelab-net \
   --env-file .env \
   -p 127.0.0.1:8000:8000 \

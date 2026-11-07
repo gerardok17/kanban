@@ -77,6 +77,8 @@ served by a FastAPI backend), started by
   reachable from the LAN or the Tailscale tailnet. The tunnel is the only door.
 - Attached to the **`homelab-net`** Docker network so it can reach the database
   container by name.
+- Runs with the **`unless-stopped`** restart policy, so it comes back on its own
+  after hyperion reboots. Docker and `cloudflared` are enabled at boot too.
 
 ### 4. The database — shared MariaDB
 
