@@ -346,7 +346,7 @@
       <div class="piece">
         <span class="n">3</span>
         <h3>The app &mdash; Docker on loopback</h3>
-        <p>The container <code>project-management-mvp</code> (Next.js served by FastAPI) is published as <code>127.0.0.1:8000</code> &mdash; <strong>loopback only</strong>, not on the LAN or the Tailscale tailnet. It joins the <code>homelab-net</code> Docker network to reach the database by name. The tunnel is the single door.</p>
+        <p>The container <code>project-management-mvp</code> (Next.js served by FastAPI) is published as <code>127.0.0.1:8000</code> &mdash; <strong>loopback only</strong>, not on the LAN or the Tailscale tailnet. It joins the <code>homelab-net</code> Docker network to reach the database by name, and runs with the <code>unless-stopped</code> restart policy so it returns on its own after hyperion reboots. The tunnel is the single door.</p>
       </div>
       <div class="piece">
         <span class="n">4</span>
